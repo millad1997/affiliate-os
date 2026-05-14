@@ -4,15 +4,31 @@ const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 
-const SYSTEM_PROMPT = `You help DTC brands evaluate TikTok creators for affiliate partnerships.
+const BRAND_CATEGORIES = [
+  "Supplements & Wellness",
+  "Beauty & Skincare",
+  "Men's Grooming",
+  "Sports Nutrition",
+  "Food & Beverage",
+  "Apparel",
+  "Other",
+] as const;
 
-You do NOT have access to real TikTok data, analytics, or the internet. You only see a TikTok username string.
+const MAX_TEXT_FIELD = 6000;
 
-Your job is to produce a **hypothetical "creator score" from 1–100** that would be plausible for a recruiting screen, based only on gut feel from the handle: memorability, professionalism, niche hints in the name, length, and whether it looks like a brand vs personal account. This is explicitly a placeholder until real metrics exist—make reasonable assumptions and say so in the rationale.
+const SYSTEM_PROMPT = `You are an affiliate marketing scoring assistant for TikTok Shop–style affiliate programs. Operators use you to judge how well a TikTok creator fits **a specific brand's** positioning and target customer—not generic popularity.
 
-Rules:
-- score must be an integer from 1 through 100 inclusive.
-- Be concise. The rationale is for an internal operator, not the creator.`;
+You receive labeled inputs: brand category, optional brand description, creator username, optional creator bio, optional follower count, and optional recent post captions (often pasted with blank lines between captions). Any field that was not supplied will appear exactly as the words: not provided.
+
+**Ground rules**
+- Do not invent metrics, audience demographics, verified performance, or post content that the user did not supply.
+- When important inputs are "not provided", say what is missing and how that limits confidence. Do not fill gaps with made-up TikTok data.
+- When richer inputs exist (bio, captions, follower scale, brand description), use them as evidence for audience match, niche or category alignment, and content style or messaging fit for the brand.
+- The username alone is a weak signal; use it lightly unless little else is available.
+
+**Output**
+- Produce a single **match score** from 1 through 100 for this brand–creator pair.
+- The rationale is for an **internal operator** (not the creator). Reference concrete signals when present (e.g. caption themes, tone, bio keywords, category fit, coarse reach from follower count). Explicitly note limitations when data is sparse.`;
 
 type AnthropicContentBlock = { type: string; text?: string };
 
@@ -48,6 +64,25 @@ function parseScorePayload(raw: string): { score: number; rationale: string } | 
   }
 }
 
+function pickString(body: Record<string, unknown>, key: string): string {
+  if (!(key in body)) return "";
+  const v = body[key];
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  return String(v);
+}
+
+function clampText(s: string, max: number): string {
+  const t = s.trim();
+  if (t.length <= max) return t;
+  return t.slice(0, max);
+}
+
+function labelOrNotProvided(value: string): string {
+  const t = value.trim();
+  return t.length > 0 ? t : "not provided";
+}
+
 export async function POST(request: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -64,11 +99,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request body must be JSON." }, { status: 400 });
   }
 
-  const rawUsername =
-    typeof body === "object" && body !== null && "username" in body
-      ? String((body as { username: unknown }).username)
-      : "";
+  if (typeof body !== "object" || body === null) {
+    return NextResponse.json({ error: "Request body must be a JSON object." }, { status: 400 });
+  }
 
+  const b = body as Record<string, unknown>;
+
+  const rawUsername = pickString(b, "username");
   const normalized = rawUsername.trim().replace(/^@+/, "").replace(/\s+/g, "");
   if (!normalized) {
     return NextResponse.json({ error: "Please enter a TikTok username." }, { status: 400 });
@@ -77,11 +114,56 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Username is too long." }, { status: 400 });
   }
 
-  const userMessage = `TikTok username: @${normalized}
+  const brandCategory = pickString(b, "brandCategory").trim();
+  if (!brandCategory) {
+    return NextResponse.json({ error: "Brand category is required." }, { status: 400 });
+  }
+  if (!BRAND_CATEGORIES.includes(brandCategory as (typeof BRAND_CATEGORIES)[number])) {
+    return NextResponse.json({ error: "Invalid brand category." }, { status: 400 });
+  }
+
+  const brandDescription = clampText(pickString(b, "brandDescription"), MAX_TEXT_FIELD);
+  const creatorBio = clampText(pickString(b, "creatorBio"), MAX_TEXT_FIELD);
+  const recentCaptions = clampText(pickString(b, "recentCaptions"), MAX_TEXT_FIELD);
+
+  let followerDisplay = "not provided";
+  if ("followerCount" in b && b.followerCount !== null && b.followerCount !== undefined && String(b.followerCount).trim() !== "") {
+    const raw = b.followerCount;
+    const n = typeof raw === "number" ? raw : Number(String(raw).trim().replace(/,/g, ""));
+    if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+      return NextResponse.json(
+        { error: "Follower count must be a non-negative whole number, or leave it empty." },
+        { status: 400 },
+      );
+    }
+    followerDisplay = String(n);
+  }
+
+  const userMessage = `Produce a brand–creator match assessment using only the fields below. Treat the literal phrase "not provided" as missing data—do not invent details beyond what is written.
+
+BRAND CATEGORY:
+${brandCategory}
+
+BRAND DESCRIPTION:
+${labelOrNotProvided(brandDescription)}
+
+CREATOR USERNAME:
+@${normalized}
+
+CREATOR BIO:
+${labelOrNotProvided(creatorBio)}
+
+FOLLOWER COUNT:
+${followerDisplay}
+
+RECENT POST CAPTIONS (entries may be separated by blank lines in the original paste):
+${labelOrNotProvided(recentCaptions)}
+
+---
 
 Return **only** a single JSON object (no markdown fences, no commentary) with exactly these keys:
-- "score": integer from 1 to 100
-- "rationale": string, 2 short sentences explaining your placeholder judgment and that data was not available.`;
+- "score": integer from 1 to 100 (brand–creator match for affiliate partnership potential)
+- "rationale": string, 2–5 sentences. When data exists, cite specific signals (e.g. audience or customer alignment, niche/category fit, content style vs brand positioning). When fields were "not provided", explicitly state what was missing and how that caps confidence. Never claim to have seen analytics or posts that were not supplied.`;
 
   const anthropicRes = await fetch(ANTHROPIC_MESSAGES_URL, {
     method: "POST",
@@ -92,8 +174,8 @@ Return **only** a single JSON object (no markdown fences, no commentary) with ex
     },
     body: JSON.stringify({
       model: getModel(),
-      max_tokens: 512,
-      temperature: 0.4,
+      max_tokens: 1024,
+      temperature: 0.35,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     }),
