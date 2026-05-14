@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 
@@ -127,6 +128,7 @@ export async function POST(request: Request) {
   const recentCaptions = clampText(pickString(b, "recentCaptions"), MAX_TEXT_FIELD);
 
   let followerDisplay = "not provided";
+  let followerForDb: number | null = null;
   if ("followerCount" in b && b.followerCount !== null && b.followerCount !== undefined && String(b.followerCount).trim() !== "") {
     const raw = b.followerCount;
     const n = typeof raw === "number" ? raw : Number(String(raw).trim().replace(/,/g, ""));
@@ -137,6 +139,7 @@ export async function POST(request: Request) {
       );
     }
     followerDisplay = String(n);
+    followerForDb = n;
   }
 
   const userMessage = `Produce a brand–creator match assessment using only the fields below. Treat the literal phrase "not provided" as missing data—do not invent details beyond what is written.
@@ -201,6 +204,27 @@ Return **only** a single JSON object (no markdown fences, no commentary) with ex
       },
       { status: 502 },
     );
+  }
+
+  // Persist to Supabase. This runs after the score is ready, so a DB failure
+  // can never block or alter the response the user receives.
+  try {
+    const supabase = getSupabaseServerClient();
+    const { error: dbError } = await supabase.from("scored_creators").insert({
+      username: normalized,
+      brand_category: brandCategory,
+      brand_description: brandDescription || null,
+      creator_bio: creatorBio || null,
+      follower_count: followerForDb,
+      recent_captions: recentCaptions || null,
+      score: parsed.score,
+      rationale: parsed.rationale,
+    });
+    if (dbError) {
+      console.error("[creator-score] Supabase insert failed:", dbError);
+    }
+  } catch (err) {
+    console.error("[creator-score] Unexpected error saving to Supabase:", err);
   }
 
   return NextResponse.json({
