@@ -132,15 +132,48 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Username is too long." }, { status: 400 });
   }
 
-  const brandCategory = pickString(b, "brandCategory").trim();
-  if (!brandCategory) {
-    return NextResponse.json({ error: "Brand category is required." }, { status: 400 });
-  }
-  if (!BRAND_CATEGORIES.includes(brandCategory as (typeof BRAND_CATEGORIES)[number])) {
-    return NextResponse.json({ error: "Invalid brand category." }, { status: 400 });
+  const brandId = pickString(b, "brand_id").trim();
+
+  let brandCategory: string;
+  let brandDescription: string;
+
+  if (brandId) {
+    // Saved-brand path: fetch the row server-side, constrained to BOTH the
+    // supplied id AND the authenticated user's id. If the row does not exist
+    // or belongs to another user the query returns nothing and we reject —
+    // we never use any brand content from the request body in this path.
+    const supabase = getSupabaseServerClient();
+    const { data: brand, error: brandError } = await supabase
+      .from("brands")
+      .select("id, name, category, description")
+      .eq("id", brandId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (brandError || !brand) {
+      return NextResponse.json(
+        { error: "Brand not found or does not belong to your account." },
+        { status: 400 },
+      );
+    }
+
+    const row = brand as { name: string; category: string; description: string | null };
+    brandCategory = row.category;
+    const composed = row.description ? `${row.name}: ${row.description}` : row.name;
+    brandDescription = clampText(composed, MAX_TEXT_FIELD);
+  } else {
+    // Manual path — validate exactly as before.
+    const rawCategory = pickString(b, "brandCategory").trim();
+    if (!rawCategory) {
+      return NextResponse.json({ error: "Brand category is required." }, { status: 400 });
+    }
+    if (!BRAND_CATEGORIES.includes(rawCategory as (typeof BRAND_CATEGORIES)[number])) {
+      return NextResponse.json({ error: "Invalid brand category." }, { status: 400 });
+    }
+    brandCategory = rawCategory;
+    brandDescription = clampText(pickString(b, "brandDescription"), MAX_TEXT_FIELD);
   }
 
-  const brandDescription = clampText(pickString(b, "brandDescription"), MAX_TEXT_FIELD);
   const creatorBio = clampText(pickString(b, "creatorBio"), MAX_TEXT_FIELD);
   const recentCaptions = clampText(pickString(b, "recentCaptions"), MAX_TEXT_FIELD);
 

@@ -14,6 +14,13 @@ const BRAND_CATEGORIES = [
   "Other",
 ] as const;
 
+export type SavedBrand = {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+};
+
 type SuccessPayload = {
   username: string;
   score: number;
@@ -30,19 +37,22 @@ const fieldClass =
 
 const labelClass = "flex flex-col gap-2 text-sm font-medium text-zinc-800 dark:text-zinc-200";
 
-export default function CreatorScoreForm() {
+export default function CreatorScoreForm({ savedBrands }: { savedBrands: SavedBrand[] }) {
   const [username, setUsername] = useState("");
   const [brandCategory, setBrandCategory] = useState("");
   const [brandDescription, setBrandDescription] = useState("");
   const [creatorBio, setCreatorBio] = useState("");
   const [followerCount, setFollowerCount] = useState("");
   const [recentCaptions, setRecentCaptions] = useState("");
+  const [selectedBrandId, setSelectedBrandId] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SuccessPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [debugRaw, setDebugRaw] = useState<string | null>(null);
 
-  const canSubmit = username.trim() && brandCategory && !loading;
+  const isManual = selectedBrandId === "";
+  const selectedBrand = savedBrands.find((b) => b.id === selectedBrandId) ?? null;
+  const canSubmit = !!(username.trim() && (isManual ? brandCategory : selectedBrandId) && !loading);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -52,13 +62,26 @@ export default function CreatorScoreForm() {
     setDebugRaw(null);
 
     const followerParsed = followerCount.trim();
-    const payload: Record<string, unknown> = {
-      username: username.trim(),
-      brandCategory,
-      brandDescription: brandDescription.trim(),
-      creatorBio: creatorBio.trim(),
-      recentCaptions: recentCaptions.trim(),
-    };
+
+    let payload: Record<string, unknown>;
+
+    if (isManual) {
+      payload = {
+        username: username.trim(),
+        brandCategory,
+        brandDescription: brandDescription.trim(),
+        creatorBio: creatorBio.trim(),
+        recentCaptions: recentCaptions.trim(),
+      };
+    } else {
+      payload = {
+        username: username.trim(),
+        brand_id: selectedBrandId,
+        creatorBio: creatorBio.trim(),
+        recentCaptions: recentCaptions.trim(),
+      };
+    }
+
     if (followerParsed) {
       payload.followerCount = followerParsed;
     }
@@ -125,38 +148,74 @@ export default function CreatorScoreForm() {
             <h2 className="border-b border-zinc-200 pb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
               About the brand
             </h2>
-            <label className={labelClass}>
-              Brand category
-              <span className="sr-only">(required)</span>
-              <select
-                name="brandCategory"
-                required
-                value={brandCategory}
-                onChange={(e) => setBrandCategory(e.target.value)}
-                className={fieldClass}
-                disabled={loading}
-              >
-                <option value="">Select a category…</option>
-                {BRAND_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={labelClass}>
-              Brand description{" "}
-              <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
-              <textarea
-                name="brandDescription"
-                rows={4}
-                placeholder="Products you sell and who you sell to…"
-                value={brandDescription}
-                onChange={(e) => setBrandDescription(e.target.value)}
-                className={`${fieldClass} min-h-[100px] resize-y`}
-                disabled={loading}
-              />
-            </label>
+
+            {savedBrands.length > 0 && (
+              <label className={labelClass}>
+                Brand
+                <select
+                  value={selectedBrandId}
+                  onChange={(e) => setSelectedBrandId(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                >
+                  <option value="">— Enter brand details manually —</option>
+                  {savedBrands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {!isManual && selectedBrand && (
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800/60">
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{selectedBrand.name}</p>
+                <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{selectedBrand.category}</p>
+                {selectedBrand.description && (
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+                    {selectedBrand.description}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {isManual && (
+              <>
+                <label className={labelClass}>
+                  Brand category
+                  <span className="sr-only">(required)</span>
+                  <select
+                    name="brandCategory"
+                    required
+                    value={brandCategory}
+                    onChange={(e) => setBrandCategory(e.target.value)}
+                    className={fieldClass}
+                    disabled={loading}
+                  >
+                    <option value="">Select a category…</option>
+                    {BRAND_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={labelClass}>
+                  Brand description{" "}
+                  <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                  <textarea
+                    name="brandDescription"
+                    rows={4}
+                    placeholder="Products you sell and who you sell to…"
+                    value={brandDescription}
+                    onChange={(e) => setBrandDescription(e.target.value)}
+                    className={`${fieldClass} min-h-[100px] resize-y`}
+                    disabled={loading}
+                  />
+                </label>
+              </>
+            )}
           </section>
 
           <section className="flex flex-col gap-4">
