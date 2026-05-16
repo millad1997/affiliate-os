@@ -34,6 +34,12 @@ export default async function Home() {
               >
                 View scored creators
               </Link>
+              <Link
+                href="/brands"
+                className="flex h-12 w-full items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+              >
+                Brands
+              </Link>
             </>
           ) : (
             <>
