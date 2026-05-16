@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
+import { getOptionalUser } from "@/lib/require-user";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const supabase = await getSupabaseAuthServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getOptionalUser();
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
+import { requireUser } from "@/lib/require-user";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import CreatorList, { type ScoredCreator } from "./CreatorList";
 import LogoutButton from "@/components/LogoutButton";
@@ -34,17 +33,7 @@ async function fetchScoredCreators(): Promise<{ creators: ScoredCreator[]; error
 }
 
 export default async function ScoredCreatorsPage() {
-  // Auth check uses the anon-key cookie client — it reads the session from
-  // the cookies sent with this request and verifies the token with Supabase.
-  const supabase = await getSupabaseAuthServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
+  await requireUser();
   const { creators, error } = await fetchScoredCreators();
 
   return (
