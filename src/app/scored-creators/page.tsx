@@ -8,15 +8,22 @@ import LogoutButton from "@/components/LogoutButton";
 // so the list is always fresh and the auth check always runs.
 export const dynamic = "force-dynamic";
 
-async function fetchScoredCreators(): Promise<{ creators: ScoredCreator[]; error: string | null }> {
+async function fetchScoredCreators(userId: string): Promise<{ creators: ScoredCreator[]; error: string | null }> {
   try {
-    // Data fetching uses the service-role client — it bypasses RLS and can
-    // read all rows. This is intentional: in V1 we show all scored creators.
-    // A later step will scope this to the logged-in user's own rows.
+    // Data fetching uses the service-role client (bypasses RLS) but we MUST
+    // constrain the query to the current user's rows. The service-role key
+    // can read every row in the table, so the .eq("user_id", userId) filter
+    // below is what enforces per-user isolation in this code path.
+    //
+    // SECURITY: userId comes from requireUser() — a server-side check of the
+    // Supabase auth cookies via the anon-key client. It is never read from
+    // the URL, request body, or any client-controlled input, so a user cannot
+    // ask to see someone else's rows.
     const supabase = getSupabaseServerClient();
     const { data, error } = await supabase
       .from("scored_creators")
       .select("id, username, brand_category, brand_description, creator_bio, follower_count, recent_captions, score, rationale, created_at")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -33,8 +40,8 @@ async function fetchScoredCreators(): Promise<{ creators: ScoredCreator[]; error
 }
 
 export default async function ScoredCreatorsPage() {
-  await requireUser();
-  const { creators, error } = await fetchScoredCreators();
+  const user = await requireUser();
+  const { creators, error } = await fetchScoredCreators(user.id);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">

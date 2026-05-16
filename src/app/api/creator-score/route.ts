@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
 
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 
@@ -90,6 +91,22 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Server misconfiguration: ANTHROPIC_API_KEY is not set." },
       { status: 500 },
+    );
+  }
+
+  // Identify the logged-in user via the anon-key cookie client. This client
+  // reads the Supabase auth cookies that the browser sent with the request and
+  // validates the access token. If no valid session exists, we reject the
+  // request before doing any paid Anthropic work or touching the DB — an
+  // unauthenticated request must never create a scored_creators row.
+  const authClient = await getSupabaseAuthServerClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "You must be logged in to score a creator." },
+      { status: 401 },
     );
   }
 
@@ -208,9 +225,14 @@ Return **only** a single JSON object (no markdown fences, no commentary) with ex
 
   // Persist to Supabase. This runs after the score is ready, so a DB failure
   // can never block or alter the response the user receives.
+  //
+  // SECURITY: user_id is set from the server-validated session above — never
+  // from the request body. That keeps the row's owner authoritative; a client
+  // cannot forge a user_id for someone else, even by manipulating the JSON.
   try {
     const supabase = getSupabaseServerClient();
     const { error: dbError } = await supabase.from("scored_creators").insert({
+      user_id: user.id,
       username: normalized,
       brand_category: brandCategory,
       brand_description: brandDescription || null,
