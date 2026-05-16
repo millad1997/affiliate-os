@@ -274,6 +274,7 @@ Return **only** a single JSON object (no markdown fences, no commentary) with ex
       recent_captions: recentCaptions || null,
       score: parsed.score,
       rationale: parsed.rationale,
+      brand_id: brandId || null,
     });
     if (dbError) {
       console.error("[creator-score] Supabase insert failed:", dbError);

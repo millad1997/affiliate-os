@@ -13,6 +13,8 @@ export type ScoredCreator = {
   score: number;
   rationale: string;
   created_at: string;
+  brand_id: string | null;
+  brand_name: string | null;
 };
 
 function scoreColor(score: number): string {
@@ -73,6 +75,9 @@ function CreatorRow({ creator }: { creator: ScoredCreator }) {
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-zinc-900 dark:text-zinc-50">@{creator.username}</p>
           <p className="mt-0.5 truncate text-sm text-zinc-500 dark:text-zinc-400">{creator.brand_category}</p>
+          <p className="mt-0.5 truncate text-xs text-zinc-400 dark:text-zinc-500">
+            {creator.brand_id ? (creator.brand_name ? `Scored against: ${creator.brand_name}` : "Scored against a saved brand") : "Scored manually"}
+          </p>
         </div>
 
         {/* Timestamp + chevron */}

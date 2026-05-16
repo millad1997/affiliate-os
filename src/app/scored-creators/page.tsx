@@ -22,7 +22,7 @@ async function fetchScoredCreators(userId: string): Promise<{ creators: ScoredCr
     const supabase = getSupabaseServerClient();
     const { data, error } = await supabase
       .from("scored_creators")
-      .select("id, username, brand_category, brand_description, creator_bio, follower_count, recent_captions, score, rationale, created_at")
+      .select("id, username, brand_category, brand_description, creator_bio, follower_count, recent_captions, score, rationale, created_at, brand_id")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -31,7 +31,30 @@ async function fetchScoredCreators(userId: string): Promise<{ creators: ScoredCr
       return { creators: [], error: error.message };
     }
 
-    return { creators: (data ?? []) as ScoredCreator[], error: null };
+    const rows = data ?? [];
+
+    // Resolve brand names for rows that have a brand_id. The second query is
+    // constrained to both the collected ids AND the current user's id, so the
+    // service-role client cannot return another user's brand names.
+    const brandIds = [...new Set(rows.map((r) => r.brand_id).filter((id): id is string => id !== null))];
+    const brandNameMap = new Map<string, string>();
+    if (brandIds.length > 0) {
+      const { data: brands } = await supabase
+        .from("brands")
+        .select("id, name")
+        .in("id", brandIds)
+        .eq("user_id", userId);
+      for (const b of brands ?? []) {
+        brandNameMap.set(b.id, b.name);
+      }
+    }
+
+    const creators: ScoredCreator[] = rows.map((r) => ({
+      ...r,
+      brand_name: r.brand_id ? (brandNameMap.get(r.brand_id) ?? null) : null,
+    }));
+
+    return { creators, error: null };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("[scored-creators] Unexpected fetch error:", err);
