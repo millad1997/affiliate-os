@@ -1,14 +1,19 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import CreatorList, { type ScoredCreator } from "./CreatorList";
+import LogoutButton from "@/components/LogoutButton";
 
-// Render this page on every request so the list always reflects the latest
-// scored_creators rows. Without this, Next.js would pre-render it once at
-// build time and serve stale data until the next deployment.
+// cookies() and getUser() are request-time operations — force dynamic rendering
+// so the list is always fresh and the auth check always runs.
 export const dynamic = "force-dynamic";
 
 async function fetchScoredCreators(): Promise<{ creators: ScoredCreator[]; error: string | null }> {
   try {
+    // Data fetching uses the service-role client — it bypasses RLS and can
+    // read all rows. This is intentional: in V1 we show all scored creators.
+    // A later step will scope this to the logged-in user's own rows.
     const supabase = getSupabaseServerClient();
     const { data, error } = await supabase
       .from("scored_creators")
@@ -29,6 +34,17 @@ async function fetchScoredCreators(): Promise<{ creators: ScoredCreator[]; error
 }
 
 export default async function ScoredCreatorsPage() {
+  // Auth check uses the anon-key cookie client — it reads the session from
+  // the cookies sent with this request and verifies the token with Supabase.
+  const supabase = await getSupabaseAuthServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
   const { creators, error } = await fetchScoredCreators();
 
   return (
@@ -39,20 +55,15 @@ export default async function ScoredCreatorsPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Affiliate Commerce OS</p>
             <h1 className="text-lg font-semibold">Scored creators</h1>
           </div>
-          <div className="flex items-center gap-4">
+          <nav className="flex items-center gap-4">
             <Link
               href="/creator-score"
               className="text-sm font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
             >
               Score a creator
             </Link>
-            <Link
-              href="/"
-              className="text-sm font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
-            >
-              Home
-            </Link>
-          </div>
+            <LogoutButton />
+          </nav>
         </div>
       </header>
 
