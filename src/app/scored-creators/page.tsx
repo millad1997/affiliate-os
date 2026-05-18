@@ -22,7 +22,7 @@ async function fetchScoredCreators(userId: string): Promise<{ creators: ScoredCr
     const supabase = getSupabaseServerClient();
     const { data, error } = await supabase
       .from("scored_creators")
-      .select("id, username, brand_category, brand_description, creator_bio, follower_count, recent_captions, score, rationale, created_at, brand_id")
+      .select("id, username, brand_category, brand_description, creator_bio, follower_count, recent_captions, score, rationale, created_at, brand_id, total_gmv, gmv_last_30d, posts_last_30d, posts_last_7d, likes_last_30d, likes_last_7d, views_last_30d, views_last_7d, comments_last_30d, comments_last_7d, avg_posts_per_week_12w")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 

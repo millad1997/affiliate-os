@@ -15,6 +15,17 @@ export type ScoredCreator = {
   created_at: string;
   brand_id: string | null;
   brand_name: string | null;
+  total_gmv: number | null;
+  gmv_last_30d: number | null;
+  posts_last_30d: number | null;
+  posts_last_7d: number | null;
+  likes_last_30d: number | null;
+  likes_last_7d: number | null;
+  views_last_30d: number | null;
+  views_last_7d: number | null;
+  comments_last_30d: number | null;
+  comments_last_7d: number | null;
+  avg_posts_per_week_12w: number | null;
 };
 
 function scoreColor(score: number): string {
@@ -106,6 +117,38 @@ function CreatorRow({ creator }: { creator: ScoredCreator }) {
           <DetailRow label="Creator bio" value={creator.creator_bio} />
           <DetailRow label="Follower count" value={creator.follower_count} />
           <DetailRow label="Recent captions" value={creator.recent_captions} />
+          {(creator.total_gmv !== null || creator.gmv_last_30d !== null) && (
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">GMV</span>
+              <div className="flex flex-col gap-2 pl-1">
+                <DetailRow label="Total GMV (USD)" value={creator.total_gmv} />
+                <DetailRow label="Last-30-day GMV (USD)" value={creator.gmv_last_30d} />
+              </div>
+            </div>
+          )}
+          {(creator.posts_last_30d !== null || creator.posts_last_7d !== null || creator.avg_posts_per_week_12w !== null) && (
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Posting cadence</span>
+              <div className="flex flex-col gap-2 pl-1">
+                <DetailRow label="Posts (last 30 days)" value={creator.posts_last_30d} />
+                <DetailRow label="Posts (last 7 days)" value={creator.posts_last_7d} />
+                <DetailRow label="Avg posts/week (last 12 weeks)" value={creator.avg_posts_per_week_12w} />
+              </div>
+            </div>
+          )}
+          {(creator.likes_last_30d !== null || creator.likes_last_7d !== null || creator.views_last_30d !== null || creator.views_last_7d !== null || creator.comments_last_30d !== null || creator.comments_last_7d !== null) && (
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Engagement</span>
+              <div className="flex flex-col gap-2 pl-1">
+                <DetailRow label="Likes (last 30d)" value={creator.likes_last_30d} />
+                <DetailRow label="Likes (last 7d)" value={creator.likes_last_7d} />
+                <DetailRow label="Views (last 30d)" value={creator.views_last_30d} />
+                <DetailRow label="Views (last 7d)" value={creator.views_last_7d} />
+                <DetailRow label="Comments (last 30d)" value={creator.comments_last_30d} />
+                <DetailRow label="Comments (last 7d)" value={creator.comments_last_7d} />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </li>

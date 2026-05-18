@@ -85,6 +85,50 @@ function labelOrNotProvided(value: string): string {
   return t.length > 0 ? t : "not provided";
 }
 
+function parseOptionalDecimal(
+  b: Record<string, unknown>,
+  key: string,
+  label: string,
+): { value: number | null; error: NextResponse | null } {
+  if (!(key in b) || b[key] === null || b[key] === undefined || String(b[key]).trim() === "") {
+    return { value: null, error: null };
+  }
+  const raw = b[key];
+  const n = typeof raw === "number" ? raw : Number(String(raw).trim().replace(/,/g, ""));
+  if (!Number.isFinite(n) || n < 0) {
+    return {
+      value: null,
+      error: NextResponse.json(
+        { error: `${label} must be a non-negative number, or leave it empty.` },
+        { status: 400 },
+      ),
+    };
+  }
+  return { value: n, error: null };
+}
+
+function parseOptionalCount(
+  b: Record<string, unknown>,
+  key: string,
+  label: string,
+): { value: number | null; error: NextResponse | null } {
+  if (!(key in b) || b[key] === null || b[key] === undefined || String(b[key]).trim() === "") {
+    return { value: null, error: null };
+  }
+  const raw = b[key];
+  const n = typeof raw === "number" ? raw : Number(String(raw).trim().replace(/,/g, ""));
+  if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+    return {
+      value: null,
+      error: NextResponse.json(
+        { error: `${label} must be a non-negative whole number, or leave it empty.` },
+        { status: 400 },
+      ),
+    };
+  }
+  return { value: n, error: null };
+}
+
 export async function POST(request: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -192,6 +236,41 @@ export async function POST(request: Request) {
     followerForDb = n;
   }
 
+  // Decimal fields (allow fractional values)
+  const totalGmvResult = parseOptionalDecimal(b, "totalGmv", "Total GMV");
+  if (totalGmvResult.error) return totalGmvResult.error;
+
+  const gmvLast30dResult = parseOptionalDecimal(b, "gmvLast30d", "Last-30-day GMV");
+  if (gmvLast30dResult.error) return gmvLast30dResult.error;
+
+  const avgPostsPerWeek12wResult = parseOptionalDecimal(b, "avgPostsPerWeek12w", "Avg posts/week (last 12 weeks)");
+  if (avgPostsPerWeek12wResult.error) return avgPostsPerWeek12wResult.error;
+
+  // Count fields (must be non-negative integers)
+  const postsLast30dResult = parseOptionalCount(b, "postsLast30d", "Posts (last 30 days)");
+  if (postsLast30dResult.error) return postsLast30dResult.error;
+
+  const postsLast7dResult = parseOptionalCount(b, "postsLast7d", "Posts (last 7 days)");
+  if (postsLast7dResult.error) return postsLast7dResult.error;
+
+  const likesLast30dResult = parseOptionalCount(b, "likesLast30d", "Likes (last 30d)");
+  if (likesLast30dResult.error) return likesLast30dResult.error;
+
+  const likesLast7dResult = parseOptionalCount(b, "likesLast7d", "Likes (last 7d)");
+  if (likesLast7dResult.error) return likesLast7dResult.error;
+
+  const viewsLast30dResult = parseOptionalCount(b, "viewsLast30d", "Views (last 30d)");
+  if (viewsLast30dResult.error) return viewsLast30dResult.error;
+
+  const viewsLast7dResult = parseOptionalCount(b, "viewsLast7d", "Views (last 7d)");
+  if (viewsLast7dResult.error) return viewsLast7dResult.error;
+
+  const commentsLast30dResult = parseOptionalCount(b, "commentsLast30d", "Comments (last 30d)");
+  if (commentsLast30dResult.error) return commentsLast30dResult.error;
+
+  const commentsLast7dResult = parseOptionalCount(b, "commentsLast7d", "Comments (last 7d)");
+  if (commentsLast7dResult.error) return commentsLast7dResult.error;
+
   const userMessage = `Produce a brand–creator match assessment using only the fields below. Treat the literal phrase "not provided" as missing data—do not invent details beyond what is written.
 
 BRAND CATEGORY:
@@ -275,6 +354,17 @@ Return **only** a single JSON object (no markdown fences, no commentary) with ex
       score: parsed.score,
       rationale: parsed.rationale,
       brand_id: brandId || null,
+      total_gmv: totalGmvResult.value,
+      gmv_last_30d: gmvLast30dResult.value,
+      posts_last_30d: postsLast30dResult.value,
+      posts_last_7d: postsLast7dResult.value,
+      likes_last_30d: likesLast30dResult.value,
+      likes_last_7d: likesLast7dResult.value,
+      views_last_30d: viewsLast30dResult.value,
+      views_last_7d: viewsLast7dResult.value,
+      comments_last_30d: commentsLast30dResult.value,
+      comments_last_7d: commentsLast7dResult.value,
+      avg_posts_per_week_12w: avgPostsPerWeek12wResult.value,
     });
     if (dbError) {
       console.error("[creator-score] Supabase insert failed:", dbError);

@@ -45,6 +45,24 @@ export default function CreatorScoreForm({ savedBrands }: { savedBrands: SavedBr
   const [followerCount, setFollowerCount] = useState("");
   const [recentCaptions, setRecentCaptions] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState("");
+
+  // GMV
+  const [totalGmv, setTotalGmv] = useState("");
+  const [gmvLast30d, setGmvLast30d] = useState("");
+
+  // Posting cadence
+  const [postsLast30d, setPostsLast30d] = useState("");
+  const [postsLast7d, setPostsLast7d] = useState("");
+  const [avgPostsPerWeek12w, setAvgPostsPerWeek12w] = useState("");
+
+  // Engagement
+  const [likesLast30d, setLikesLast30d] = useState("");
+  const [likesLast7d, setLikesLast7d] = useState("");
+  const [viewsLast30d, setViewsLast30d] = useState("");
+  const [viewsLast7d, setViewsLast7d] = useState("");
+  const [commentsLast30d, setCommentsLast30d] = useState("");
+  const [commentsLast7d, setCommentsLast7d] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SuccessPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +103,18 @@ export default function CreatorScoreForm({ savedBrands }: { savedBrands: SavedBr
     if (followerParsed) {
       payload.followerCount = followerParsed;
     }
+
+    if (totalGmv.trim()) payload.totalGmv = totalGmv.trim();
+    if (gmvLast30d.trim()) payload.gmvLast30d = gmvLast30d.trim();
+    if (postsLast30d.trim()) payload.postsLast30d = postsLast30d.trim();
+    if (postsLast7d.trim()) payload.postsLast7d = postsLast7d.trim();
+    if (avgPostsPerWeek12w.trim()) payload.avgPostsPerWeek12w = avgPostsPerWeek12w.trim();
+    if (likesLast30d.trim()) payload.likesLast30d = likesLast30d.trim();
+    if (likesLast7d.trim()) payload.likesLast7d = likesLast7d.trim();
+    if (viewsLast30d.trim()) payload.viewsLast30d = viewsLast30d.trim();
+    if (viewsLast7d.trim()) payload.viewsLast7d = viewsLast7d.trim();
+    if (commentsLast30d.trim()) payload.commentsLast30d = commentsLast30d.trim();
+    if (commentsLast7d.trim()) payload.commentsLast7d = commentsLast7d.trim();
 
     try {
       const res = await fetch("/api/creator-score", {
@@ -275,6 +305,196 @@ export default function CreatorScoreForm({ savedBrands }: { savedBrands: SavedBr
                 disabled={loading}
               />
             </label>
+          </section>
+
+          <section className="flex flex-col gap-4">
+            <h2 className="border-b border-zinc-200 pb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              GMV
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <label className={labelClass}>
+                Total GMV (USD) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="totalGmv"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="e.g. 48500.00"
+                  value={totalGmv}
+                  onChange={(e) => setTotalGmv(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+              <label className={labelClass}>
+                Last-30-day GMV (USD) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="gmvLast30d"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="e.g. 3200.50"
+                  value={gmvLast30d}
+                  onChange={(e) => setGmvLast30d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-4">
+            <h2 className="border-b border-zinc-200 pb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              Posting cadence
+            </h2>
+            <div className="grid grid-cols-3 gap-4">
+              <label className={labelClass}>
+                Posts (last 30 days) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="postsLast30d"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 24"
+                  value={postsLast30d}
+                  onChange={(e) => setPostsLast30d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+              <label className={labelClass}>
+                Posts (last 7 days) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="postsLast7d"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 5"
+                  value={postsLast7d}
+                  onChange={(e) => setPostsLast7d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+              <label className={labelClass}>
+                Avg posts/week (last 12 weeks){" "}
+                <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="avgPostsPerWeek12w"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="e.g. 5.5"
+                  value={avgPostsPerWeek12w}
+                  onChange={(e) => setAvgPostsPerWeek12w(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-4">
+            <h2 className="border-b border-zinc-200 pb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              Engagement
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <label className={labelClass}>
+                Likes (last 30d) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="likesLast30d"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 420000"
+                  value={likesLast30d}
+                  onChange={(e) => setLikesLast30d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+              <label className={labelClass}>
+                Likes (last 7d) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="likesLast7d"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 95000"
+                  value={likesLast7d}
+                  onChange={(e) => setLikesLast7d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+              <label className={labelClass}>
+                Views (last 30d) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="viewsLast30d"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 2100000"
+                  value={viewsLast30d}
+                  onChange={(e) => setViewsLast30d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+              <label className={labelClass}>
+                Views (last 7d) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="viewsLast7d"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 480000"
+                  value={viewsLast7d}
+                  onChange={(e) => setViewsLast7d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+              <label className={labelClass}>
+                Comments (last 30d) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="commentsLast30d"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 8400"
+                  value={commentsLast30d}
+                  onChange={(e) => setCommentsLast30d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+              <label className={labelClass}>
+                Comments (last 7d) <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+                <input
+                  type="number"
+                  name="commentsLast7d"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 1900"
+                  value={commentsLast7d}
+                  onChange={(e) => setCommentsLast7d(e.target.value)}
+                  className={fieldClass}
+                  disabled={loading}
+                />
+              </label>
+            </div>
           </section>
 
           <button
