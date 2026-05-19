@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
+import { computeComposite } from "@/lib/composite-score";
 
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 
@@ -335,6 +336,17 @@ Return **only** a single JSON object (no markdown fences, no commentary) with ex
     );
   }
 
+  const compositeResult = computeComposite({
+    fitSubScore: parsed.score,
+    gmvLast30d: gmvLast30dResult.value,
+    totalGmv: totalGmvResult.value,
+    avgPostsPerWeek12w: avgPostsPerWeek12wResult.value,
+    postsLast30d: postsLast30dResult.value,
+    likesLast30d: likesLast30dResult.value,
+    commentsLast30d: commentsLast30dResult.value,
+    viewsLast30d: viewsLast30dResult.value,
+  });
+
   // Persist to Supabase. This runs after the score is ready, so a DB failure
   // can never block or alter the response the user receives.
   //
@@ -354,6 +366,9 @@ Return **only** a single JSON object (no markdown fences, no commentary) with ex
       score: parsed.score,
       rationale: parsed.rationale,
       brand_id: brandId || null,
+      composite_score: compositeResult.composite,
+      performance_subscore: compositeResult.performanceSubScore,
+      score_basis: compositeResult.scoreBasis,
       total_gmv: totalGmvResult.value,
       gmv_last_30d: gmvLast30dResult.value,
       posts_last_30d: postsLast30dResult.value,

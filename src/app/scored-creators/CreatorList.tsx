@@ -26,6 +26,9 @@ export type ScoredCreator = {
   comments_last_30d: number | null;
   comments_last_7d: number | null;
   avg_posts_per_week_12w: number | null;
+  composite_score: number | null;
+  performance_subscore: number | null;
+  score_basis: string | null;
 };
 
 function scoreColor(score: number): string {
@@ -68,6 +71,9 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
 function CreatorRow({ creator }: { creator: ScoredCreator }) {
   const [open, setOpen] = useState(false);
 
+  const isLegacy = creator.composite_score === null;
+  const displayScore = creator.composite_score ?? creator.score;
+
   return (
     <li className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
       <button
@@ -76,11 +82,16 @@ function CreatorRow({ creator }: { creator: ScoredCreator }) {
         aria-expanded={open}
       >
         {/* Score badge */}
-        <span
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg text-xl font-bold tabular-nums ${scoreBg(creator.score)} ${scoreColor(creator.score)}`}
-        >
-          {creator.score}
-        </span>
+        <div className="shrink-0 flex flex-col items-center gap-1">
+          <span
+            className={`flex h-12 w-12 items-center justify-center rounded-lg text-xl font-bold tabular-nums ${scoreBg(displayScore)} ${scoreColor(displayScore)}`}
+          >
+            {displayScore}
+          </span>
+          {isLegacy && (
+            <span className="text-[10px] font-medium leading-none text-zinc-400 dark:text-zinc-500">legacy</span>
+          )}
+        </div>
 
         {/* Main info */}
         <div className="min-w-0 flex-1">
@@ -112,6 +123,34 @@ function CreatorRow({ creator }: { creator: ScoredCreator }) {
 
       {open && (
         <div className="flex flex-col gap-5 border-t border-zinc-100 px-5 py-5 dark:border-zinc-800">
+          {/* Score breakdown */}
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Score breakdown</span>
+            <div className="flex flex-col gap-1 pl-1">
+              {isLegacy ? (
+                <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                  Fit score (legacy): {creator.score}
+                </span>
+              ) : (
+                <>
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                    Fit sub-score: {creator.score}
+                  </span>
+                  {creator.score_basis === "composite" && (
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                      Performance sub-score: {creator.performance_subscore}
+                    </span>
+                  )}
+                  {creator.score_basis === "fit_only_no_perf_data" && (
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                      No performance data — fit-based (−{creator.score - (creator.composite_score ?? creator.score)})
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
           <DetailRow label="Rationale" value={creator.rationale} />
           <DetailRow label="Brand description" value={creator.brand_description} />
           <DetailRow label="Creator bio" value={creator.creator_bio} />
