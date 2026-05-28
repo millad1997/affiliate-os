@@ -1,4 +1,5 @@
-const NO_PERF_DATA_PENALTY = 8;
+const NO_PERF_DATA_PENALTY = 12;
+const RANGE_PENALTY = 4;
 
 type Anchor = [number, number];
 
@@ -42,6 +43,8 @@ const ENGAGEMENT_RATE_ANCHORS: Anchor[] = [
 export type CompositeScoreArgs = {
   fitSubScore: number;
   gmvLast30d: number | null;
+  gmvSource?: "precise" | "range" | "none";
+  gmvRange?: { min: number; max: number } | null;
   totalGmv: number | null;
   avgPostsPerWeek12w: number | null;
   postsLast30d: number | null;
@@ -54,13 +57,15 @@ export type CompositeScoreResult = {
   composite: number;
   performanceSubScore: number | null;
   fitSubScore: number;
-  scoreBasis: "composite" | "fit_only_no_perf_data";
+  scoreBasis: "composite" | "composite_range" | "fit_only_no_perf_data";
 };
 
 export function computeComposite(args: CompositeScoreArgs): CompositeScoreResult {
   const {
     fitSubScore,
     gmvLast30d,
+    gmvSource,
+    gmvRange,
     totalGmv,
     avgPostsPerWeek12w,
     postsLast30d,
@@ -69,7 +74,15 @@ export function computeComposite(args: CompositeScoreArgs): CompositeScoreResult
     viewsLast30d,
   } = args;
 
-  if (gmvLast30d === null) {
+  const isPrecise = gmvLast30d !== null;
+  const isRange =
+    !isPrecise &&
+    gmvSource === "range" &&
+    gmvRange != null &&
+    Number.isFinite(gmvRange.min) &&
+    Number.isFinite(gmvRange.max);
+
+  if (!isPrecise && !isRange) {
     return {
       composite: clamp(fitSubScore - NO_PERF_DATA_PENALTY, 1, 100),
       performanceSubScore: null,
@@ -78,8 +91,12 @@ export function computeComposite(args: CompositeScoreArgs): CompositeScoreResult
     };
   }
 
-  // Component 1: last-30-day GMV (always present when gmvLast30d is non-null)
-  const comp1 = piecewiseLinear(GMV_30D_ANCHORS, gmvLast30d);
+  const gmvForComp1 = isPrecise
+    ? gmvLast30d
+    : (gmvRange!.min + gmvRange!.max) / 2;
+
+  // Component 1: last-30-day GMV (precise value or range midpoint)
+  const comp1 = piecewiseLinear(GMV_30D_ANCHORS, gmvForComp1);
 
   // Component 2: total GMV (drop if null)
   const comp2 = totalGmv !== null ? piecewiseLinear(TOTAL_GMV_ANCHORS, totalGmv) : null;
@@ -122,12 +139,14 @@ export function computeComposite(args: CompositeScoreArgs): CompositeScoreResult
   );
 
   const performanceSubScore = clamp(Math.round(weightedSum), 0, 100);
-  const composite = clamp(Math.round(0.60 * performanceSubScore + 0.40 * fitSubScore), 1, 100);
+  const composite = isPrecise
+    ? clamp(Math.round(0.60 * performanceSubScore + 0.40 * fitSubScore), 1, 100)
+    : clamp(Math.round(0.60 * performanceSubScore + 0.40 * fitSubScore) - RANGE_PENALTY, 1, 100);
 
   return {
     composite,
     performanceSubScore,
     fitSubScore,
-    scoreBasis: "composite",
+    scoreBasis: isPrecise ? "composite" : "composite_range",
   };
 }
