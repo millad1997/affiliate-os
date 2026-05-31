@@ -160,3 +160,57 @@ export async function getTikTokCredentials(
     return { ok: false, reason: "query_failed" };
   }
 }
+
+// ── Connection status (token-free, for UI) ────────────────────────────────────
+
+export type TikTokConnectionStatus =
+  | { connected: false }
+  | {
+      connected: true;
+      sellerName: string | null;
+      sellerBaseRegion: string | null;
+      shopRegion: string | null;
+      shopId: string | null;
+    };
+
+// Explicit row shape for the UI status read. CRITICAL: this intentionally EXCLUDES
+// access_token, refresh_token, and every expiry column — the status read must never
+// load a token into memory, let alone return one. Keeps the untyped service-role
+// client from leaking `any`.
+type TikTokConnectionStatusRow = {
+  user_id: string;
+  seller_name: string | null;
+  seller_base_region: string | null;
+  shop_region: string | null;
+  shop_id: string | null;
+};
+
+// Token-free connection-status read for UI use. Fails closed: a missing row OR any
+// error is reported as { connected: false }. Never throws, never logs, and never
+// selects or returns access_token / refresh_token.
+export async function getTikTokConnectionStatus(
+  userId: string,
+): Promise<TikTokConnectionStatus> {
+  try {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("seller_name, seller_base_region, shop_region, shop_id, user_id")
+      .eq("user_id", userId)
+      .maybeSingle<TikTokConnectionStatusRow>();
+
+    if (error || !data) {
+      return { connected: false };
+    }
+
+    return {
+      connected: true,
+      sellerName: data.seller_name,
+      sellerBaseRegion: data.seller_base_region,
+      shopRegion: data.shop_region,
+      shopId: data.shop_id,
+    };
+  } catch {
+    return { connected: false };
+  }
+}

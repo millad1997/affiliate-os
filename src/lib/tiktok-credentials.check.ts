@@ -20,6 +20,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   storeTikTokCredentials,
   getTikTokCredentials,
+  getTikTokConnectionStatus,
 } from "./tiktok-credentials";
 import { getSupabaseServerClient } from "./supabase-server";
 import type { TikTokTokenSet } from "./tiktok-auth-token";
@@ -136,6 +137,46 @@ async function main(): Promise<void> {
       console.log("TEARDOWN OK");
     } else {
       fail("TEARDOWN FAILED");
+    }
+  }
+
+  // ── PART 4: token-free connection status for UI ─────────────────────────────
+  {
+    const stored = await storeTikTokCredentials(TEST_USER_ID, token);
+    if (!stored.ok) {
+      fail(`PART 4 FAIL: store returned ok=false (reason=${stored.reason})`);
+    } else {
+      const status = await getTikTokConnectionStatus(TEST_USER_ID);
+      const problems: string[] = [];
+
+      if (!status.connected) {
+        problems.push("connected is false, expected true");
+      } else {
+        if (status.sellerName !== token.sellerName) problems.push("sellerName mismatch");
+        if (status.sellerBaseRegion !== "US") problems.push("sellerBaseRegion !== 'US'");
+      }
+
+      // Prove the UI accessor structurally cannot leak tokens: the returned object
+      // exposes neither an accessToken nor a refreshToken key.
+      if ("accessToken" in status) problems.push("accessToken key present");
+      if ("refreshToken" in status) problems.push("refreshToken key present");
+
+      // Delete the row and confirm the status now fails closed to not-connected.
+      const supabase = getSupabaseServerClient();
+      const { error: deleteError } = await supabase
+        .from("tiktok_credentials")
+        .delete()
+        .eq("user_id", TEST_USER_ID);
+      if (deleteError) problems.push("delete failed");
+
+      const afterDelete = await getTikTokConnectionStatus(TEST_USER_ID);
+      if (afterDelete.connected !== false) problems.push("connected !== false after delete");
+
+      if (problems.length > 0) {
+        fail(`PART 4 FAIL: ${problems.join("; ")}`);
+      } else {
+        console.log("PART 4 PASS");
+      }
     }
   }
 }
