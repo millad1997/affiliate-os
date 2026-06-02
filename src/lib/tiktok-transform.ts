@@ -34,9 +34,18 @@ function nullableProduct(avg: number | null, count: number | null): number | nul
   return avg * count;
 }
 
-function nullableSum(a: number | null, b: number | null): number | null {
-  if (a === null || b === null) return null;
-  return a + b;
+// Coalescing sum for the video+live metric pair. Treats a null side as a 0
+// contribution, returning null ONLY when BOTH sides are null (neither a video nor a
+// live signal). Prevents a no-lives (video-only) creator's absent live fields from
+// nulling out otherwise-valid video metrics. Semantic basis: no livestream activity
+// == zero live contribution, not "unknown".
+// First-live watch: assumes the live family is absent *together* for no-lives creators,
+// not mixed-partial. A live count present without its paired avg (or vice versa) yields
+// a null product that is coalesced to 0 here, slightly understating — revisit if real
+// responses show mixed-partial live fields.
+function coalescingSum(a: number | null, b: number | null): number | null {
+  if (a === null && b === null) return null;
+  return (a ?? 0) + (b ?? 0);
 }
 
 export function transformMarketplaceCreator(raw: MarketplaceCreatorRaw): TransformedCreatorMetrics {
@@ -58,17 +67,17 @@ export function transformMarketplaceCreator(raw: MarketplaceCreatorRaw): Transfo
 
   const videoLikes = nullableProduct(raw.avg_ec_video_like_count, raw.ec_video_count);
   const liveLikes = nullableProduct(raw.avg_ec_live_like_count, raw.ec_live_count);
-  const likesLast30d = nullableSum(videoLikes, liveLikes);
+  const likesLast30d = coalescingSum(videoLikes, liveLikes);
 
   const videoComments = nullableProduct(raw.avg_ec_video_comment_count, raw.ec_video_count);
   const liveComments = nullableProduct(raw.avg_ec_live_comment_count, raw.ec_live_count);
-  const commentsLast30d = nullableSum(videoComments, liveComments);
+  const commentsLast30d = coalescingSum(videoComments, liveComments);
 
   const videoViews = nullableProduct(raw.avg_ec_video_play_count, raw.ec_video_count);
   const liveViews = nullableProduct(raw.avg_ec_live_view_count, raw.ec_live_count);
-  const viewsLast30d = nullableSum(videoViews, liveViews);
+  const viewsLast30d = coalescingSum(videoViews, liveViews);
 
-  const postsLast30d = nullableSum(raw.ec_video_count, raw.ec_live_count);
+  const postsLast30d = coalescingSum(raw.ec_video_count, raw.ec_live_count);
 
   // First-call proxy: real 12-week accumulation not yet available from this endpoint.
   const avgPostsPerWeek12w = postsLast30d !== null ? postsLast30d / 4.33 : null;
