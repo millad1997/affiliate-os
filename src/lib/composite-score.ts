@@ -24,10 +24,6 @@ const GMV_30D_ANCHORS: Anchor[] = [
   [0, 0], [1000, 10], [5000, 45], [10000, 65], [15000, 78], [20000, 86], [30000, 100],
 ];
 
-const TOTAL_GMV_ANCHORS: Anchor[] = [
-  [0, 0], [10000, 40], [50000, 75], [150000, 100],
-];
-
 const CONSISTENCY_ANCHORS: Anchor[] = [
   [0, 0], [3, 60], [7, 90], [10, 100],
 ];
@@ -45,7 +41,7 @@ export type CompositeScoreArgs = {
   gmvLast30d: number | null;
   gmvSource?: "precise" | "range" | "none";
   gmvRange?: { min: number; max: number } | null;
-  totalGmv: number | null;
+  totalGmv: number | null; // retained for caller compatibility; unused — the API exposes no lifetime-GMV field
   avgPostsPerWeek12w: number | null;
   postsLast30d: number | null;
   likesLast30d: number | null;
@@ -66,7 +62,6 @@ export function computeComposite(args: CompositeScoreArgs): CompositeScoreResult
     gmvLast30d,
     gmvSource,
     gmvRange,
-    totalGmv,
     avgPostsPerWeek12w,
     postsLast30d,
     likesLast30d,
@@ -98,8 +93,8 @@ export function computeComposite(args: CompositeScoreArgs): CompositeScoreResult
   // Component 1: last-30-day GMV (precise value or range midpoint)
   const comp1 = piecewiseLinear(GMV_30D_ANCHORS, gmvForComp1);
 
-  // Component 2: total GMV (drop if null)
-  const comp2 = totalGmv !== null ? piecewiseLinear(TOTAL_GMV_ANCHORS, totalGmv) : null;
+  // (Former Component 2, total GMV at weight 0.20, removed: the API has no lifetime-GMV field,
+  // so it never fired. Its nominal weight is absorbed into the live components below.)
 
   // Component 3: consistency (drop if avgPostsPerWeek12w is null)
   let comp3: number | null = null;
@@ -126,10 +121,9 @@ export function computeComposite(args: CompositeScoreArgs): CompositeScoreResult
 
   // Collect active components; renormalize weights to sum to 1
   const components: Array<{ value: number; weight: number }> = [
-    { value: comp1, weight: 0.50 },
+    { value: comp1, weight: 0.625 },
   ];
-  if (comp2 !== null) components.push({ value: comp2, weight: 0.20 });
-  if (comp3 !== null) components.push({ value: comp3, weight: 0.15 });
+  if (comp3 !== null) components.push({ value: comp3, weight: 0.225 });
   if (comp4 !== null) components.push({ value: comp4, weight: 0.15 });
 
   const totalWeight = components.reduce((sum, c) => sum + c.weight, 0);

@@ -24,14 +24,14 @@ check("1: fit-only composite = fit - 12", r1.composite === 58);
 check("1: fit-only perf is null", r1.performanceSubScore === null);
 check("1: fit-only basis", r1.scoreBasis === "fit_only_no_perf_data");
 
-// 2 — precise, all four components active, weights sum to 1.0.
+// 2 — precise, all three live components active, weights sum to 1.0.
 const full: CompositeScoreArgs = {
   fitSubScore: 80, gmvLast30d: 10000, gmvSource: "precise", gmvRange: null,
   totalGmv: 50000, avgPostsPerWeek12w: 7, postsLast30d: 30,
   likesLast30d: 8000, commentsLast30d: 2000, viewsLast30d: 200000,
 };
 const r2 = computeComposite(full);
-check("2: full perf = 72", r2.performanceSubScore === 72);
+check("2: full perf = 71", r2.performanceSubScore === 71);
 check("2: full composite = 75", r2.composite === 75);
 check("2: full basis", r2.scoreBasis === "composite");
 
@@ -49,7 +49,7 @@ const videoOnlyPreFix: CompositeScoreArgs = {
 };
 const r3post = computeComposite(videoOnlyPostFix);
 const r3pre = computeComposite(videoOnlyPreFix);
-check("3: post-fix composite = 60", r3post.composite === 60);
+check("3: post-fix composite = 61", r3post.composite === 61);
 check("3: pre-fix composite = 51", r3pre.composite === 51);
 check("3: fix raises video-only composite", r3post.composite > r3pre.composite);
 
@@ -73,8 +73,8 @@ const zeroPosts: CompositeScoreArgs = {
 const somePosts: CompositeScoreArgs = { ...zeroPosts, postsLast30d: 5 };
 const r5zero = computeComposite(zeroPosts);
 const r5some = computeComposite(somePosts);
-check("5: zero-posts perf = 18", r5zero.performanceSubScore === 18);
-check("5: nonzero-posts perf = 28", r5some.performanceSubScore === 28);
+check("5: zero-posts perf = 19", r5zero.performanceSubScore === 19);
+check("5: nonzero-posts perf = 31", r5some.performanceSubScore === 31);
 check("5: zero-posts penalty lowers perf", (r5zero.performanceSubScore ?? 0) < (r5some.performanceSubScore ?? 0));
 check("5: zero-posts composite = 31", r5zero.composite === 31);
 
@@ -85,8 +85,8 @@ const noViews: CompositeScoreArgs = {
   likesLast30d: 10000, commentsLast30d: null, viewsLast30d: null,
 };
 const r6 = computeComposite(noViews);
-check("6: no-views perf = 51", r6.performanceSubScore === 51);
-check("6: no-views composite = 51", r6.composite === 51);
+check("6: no-views perf = 50", r6.performanceSubScore === 50);
+check("6: no-views composite = 50", r6.composite === 50);
 
 // 7 — piecewise interpolation at a non-anchor GMV (7500 -> 55, between 5000/10000).
 const interp: CompositeScoreArgs = {
