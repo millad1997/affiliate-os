@@ -3,6 +3,9 @@
 // cheap fit gate to the expensive detail-fetch + composite. Proves: a fit rejection
 // short-circuits WITHOUT fetching detail; a survivor fetches once and scores end to end
 // with the fit sub-score threaded in; a detail parse failure propagates as stage "parse".
+// Also proves the optional post-score GMV floor: above-floor passes through (result
+// undisturbed), below-floor drops as stage "gmv_floor" (detail still fetched — it is a
+// post-score gate), and the floor never disturbs the fit/parse short-circuits.
 // Run: npx tsx src/lib/score-candidate.check.ts
 import { scoreCandidate, type FetchCreatorDetail } from "./score-candidate";
 import type { BrandFitConfig } from "./fit-score";
@@ -98,6 +101,47 @@ async function main() {
     check("3: message boom", res3.message === "boom");
   }
   check("3: detail was fetched (survivor)", calls3.length === 1);
+
+  // 4 — floor configured, precise GMV (5000) ABOVE floor (1000) -> passes through to
+  //     success, scored result undisturbed (composite still 73). Detail fetched once.
+  const calls4: string[] = [];
+  const cand4 = makeCandidate({ creatorOpenId: "open_above", selectionRegion: "US", followerCount: 80000, categoryIds: ["100"] });
+  const res4 = await scoreCandidate({ config: cfg, candidate: cand4, fetchDetail: recordingFetch(calls4, videoOnlyDetail), gmvFloorConfig: { minGmvFloor: 1000 } });
+  check("4: ok (above floor)", res4.ok === true);
+  if (res4.ok) {
+    check("4: composite still 73", res4.score.composite === 73);
+    check("4: gmv precise 5000", res4.metrics.gmvLast30d === 5000);
+  }
+  check("4: detail fetched once", calls4.length === 1);
+
+  // 5 — floor configured, precise GMV (5000) BELOW floor (10000) -> dropped as stage
+  //     "gmv_floor" with effectiveGmv 5000. Detail WAS fetched (floor is a POST-score gate).
+  const calls5: string[] = [];
+  const cand5 = makeCandidate({ creatorOpenId: "open_below", selectionRegion: "US", followerCount: 80000, categoryIds: ["100"] });
+  const res5 = await scoreCandidate({ config: cfg, candidate: cand5, fetchDetail: recordingFetch(calls5, videoOnlyDetail), gmvFloorConfig: { minGmvFloor: 10000 } });
+  check("5: not ok (below floor)", res5.ok === false);
+  if (!res5.ok) check("5: stage gmv_floor", res5.stage === "gmv_floor");
+  if (!res5.ok && res5.stage === "gmv_floor") check("5: effectiveGmv 5000", res5.effectiveGmv === 5000);
+  check("5: detail WAS fetched (post-score gate)", calls5.length === 1);
+
+  // 6 — floor configured but fit REJECTS (out of region): still stage "fit", detail NEVER
+  //     fetched. The floor config does not disturb the cheap early gate / short-circuit.
+  const calls6: string[] = [];
+  const cand6 = makeCandidate({ selectionRegion: "GB" });
+  const res6 = await scoreCandidate({ config: cfg, candidate: cand6, fetchDetail: recordingFetch(calls6, videoOnlyDetail), gmvFloorConfig: { minGmvFloor: 10000 } });
+  check("6: not ok", res6.ok === false);
+  if (!res6.ok) check("6: stage fit (floor not reached)", res6.stage === "fit");
+  check("6: detail NOT fetched", calls6.length === 0);
+
+  // 7 — floor configured but the detail call API-errors: still stage "parse"; the floor is
+  //     never reached because scoring failed first.
+  const calls7: string[] = [];
+  const cand7 = makeCandidate({ selectionRegion: "US", followerCount: 80000, categoryIds: ["100"] });
+  const errorDetail7: GetCreatorApiResponse = { code: 99999, message: "boom" };
+  const res7 = await scoreCandidate({ config: cfg, candidate: cand7, fetchDetail: recordingFetch(calls7, errorDetail7), gmvFloorConfig: { minGmvFloor: 10000 } });
+  check("7: not ok", res7.ok === false);
+  if (!res7.ok) check("7: stage parse (floor not reached)", res7.stage === "parse");
+  check("7: detail fetched once", calls7.length === 1);
 
   if (failures > 0) { console.error(`\n${failures} check(s) FAILED`); process.exit(1); }
   console.log("\nAll score-candidate checks passed.");
