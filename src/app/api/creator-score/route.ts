@@ -392,5 +392,8 @@ Return **only** a single JSON object (no markdown fences, no commentary) with ex
     username: normalized,
     score: parsed.score,
     rationale: parsed.rationale,
+    composite: compositeResult.composite,
+    performanceSubScore: compositeResult.performanceSubScore,
+    scoreBasis: compositeResult.scoreBasis,
   });
 }

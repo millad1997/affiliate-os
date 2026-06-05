@@ -25,6 +25,9 @@ type SuccessPayload = {
   username: string;
   score: number;
   rationale: string;
+  composite: number;
+  performanceSubScore: number | null;
+  scoreBasis: "composite" | "composite_range" | "fit_only_no_perf_data";
 };
 
 type ErrorPayload = {
@@ -132,7 +135,7 @@ export default function CreatorScoreForm({ savedBrands }: { savedBrands: SavedBr
         return;
       }
 
-      if ("score" in data && "rationale" in data) {
+      if ("composite" in data && "rationale" in data) {
         setResult(data);
       } else {
         setError("Unexpected response from server.");
@@ -532,8 +535,26 @@ export default function CreatorScoreForm({ savedBrands }: { savedBrands: SavedBr
             <p className="text-xs font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-300/90">
               @{result.username}
             </p>
-            <p className="mt-2 text-4xl font-bold tabular-nums text-emerald-950 dark:text-emerald-50">{result.score}</p>
+            <p className="mt-2 text-4xl font-bold tabular-nums text-emerald-950 dark:text-emerald-50">{result.composite}</p>
             <p className="text-sm font-medium text-emerald-900/80 dark:text-emerald-200/90">Brand–creator match score</p>
+
+            <div className="mt-4 flex flex-col gap-1 border-t border-emerald-200/70 pt-4 dark:border-emerald-900/40">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800/80 dark:text-emerald-300/80">
+                Score breakdown
+              </p>
+              <p className="text-sm text-emerald-950/90 dark:text-emerald-100/90">Fit sub-score: {result.score}</p>
+              {result.scoreBasis === "composite" && (
+                <p className="text-sm text-emerald-950/90 dark:text-emerald-100/90">
+                  Performance sub-score: {result.performanceSubScore}
+                </p>
+              )}
+              {result.scoreBasis === "fit_only_no_perf_data" && (
+                <p className="text-sm text-emerald-950/90 dark:text-emerald-100/90">
+                  No performance data — fit-based (−{result.score - result.composite})
+                </p>
+              )}
+            </div>
+
             <p className="mt-4 text-sm leading-relaxed text-emerald-950/90 dark:text-emerald-100/90">{result.rationale}</p>
           </section>
         )}
