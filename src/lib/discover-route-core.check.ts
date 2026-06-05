@@ -48,13 +48,13 @@ function makeFailGetConfig(reason: "not_found" | "malformed" | "query_failed") {
   });
 }
 
-let lastRunPagedArgs: PagedDiscoverArgs | null = null;
+const runPagedCalls: PagedDiscoverArgs[] = [];
 
 function makeOkRunPaged(
   overrideResult?: Partial<Extract<PagedDiscoverResult, { ok: true }>>,
 ) {
   return async (args: PagedDiscoverArgs): Promise<PagedDiscoverResult> => {
-    lastRunPagedArgs = args;
+    runPagedCalls.push(args);
     return {
       ok: true,
       plan: FAKE_PLAN,
@@ -69,7 +69,7 @@ function makeOkRunPaged(
 
 function makeFailRunPaged() {
   return async (args: PagedDiscoverArgs): Promise<PagedDiscoverResult> => {
-    lastRunPagedArgs = args;
+    runPagedCalls.push(args);
     return { ok: false, stage: "search", code: -1, message: "transport_network_error" };
   };
 }
@@ -180,7 +180,7 @@ async function run(): Promise<void> {
 
   // G: ok path — response shape and recorded runPaged args
   {
-    lastRunPagedArgs = null;
+    runPagedCalls.length = 0;
     const r = await handleDiscoverRequest({ brandId: "b1" }, {
       userId: "u1",
       getConfig: makeOkGetConfig(),
@@ -188,6 +188,7 @@ async function run(): Promise<void> {
       fetchDetail: noopFetchDetail,
       runPaged: makeOkRunPaged(),
     });
+    const captured = runPagedCalls[runPagedCalls.length - 1];
     assert("G: status 200", r.status === 200);
     assert("G: body.ok true", r.body.ok === true);
     assert(
@@ -200,33 +201,33 @@ async function run(): Promise<void> {
     );
     assert(
       "G: args.config === FAKE_CONFIGS.fitConfig",
-      lastRunPagedArgs !== null && lastRunPagedArgs.config === FAKE_CONFIGS.fitConfig,
+      captured !== undefined && captured.config === FAKE_CONFIGS.fitConfig,
     );
     assert(
       "G: args.policy === FAKE_CONFIGS.policy",
-      lastRunPagedArgs !== null && lastRunPagedArgs.policy === FAKE_CONFIGS.policy,
+      captured !== undefined && captured.policy === FAKE_CONFIGS.policy,
     );
     assert(
       "G: args.gmvFloorConfig === FAKE_CONFIGS.gmvFloorConfig",
-      lastRunPagedArgs !== null && lastRunPagedArgs.gmvFloorConfig === FAKE_CONFIGS.gmvFloorConfig,
+      captured !== undefined && captured.gmvFloorConfig === FAKE_CONFIGS.gmvFloorConfig,
     );
     assert(
       "G: args.searchArgs.pageSize === 20",
-      lastRunPagedArgs !== null && lastRunPagedArgs.searchArgs.pageSize === 20,
+      captured !== undefined && captured.searchArgs.pageSize === 20,
     );
     assert(
       "G: args.searchArgs.body === undefined",
-      lastRunPagedArgs !== null && lastRunPagedArgs.searchArgs.body === undefined,
+      captured !== undefined && captured.searchArgs.body === undefined,
     );
     assert(
       "G: args.maxPages === 3",
-      lastRunPagedArgs !== null && lastRunPagedArgs.maxPages === 3,
+      captured !== undefined && captured.maxPages === 3,
     );
   }
 
   // H: overrides + maxPages clamped to MAX_MAX_PAGES (5)
   {
-    lastRunPagedArgs = null;
+    runPagedCalls.length = 0;
     const r = await handleDiscoverRequest(
       {
         brandId: "b1",
@@ -245,11 +246,12 @@ async function run(): Promise<void> {
         runPaged: makeOkRunPaged(),
       },
     );
+    const captured = runPagedCalls[runPagedCalls.length - 1];
     assert("H: status 200", r.status === 200);
     assert(
       "H: searchArgs.body deep-equals expected",
-      lastRunPagedArgs !== null &&
-        deepEqual(lastRunPagedArgs.searchArgs.body, {
+      captured !== undefined &&
+        deepEqual(captured.searchArgs.body, {
           keyword: "testosterone",
           count_range: { count_ge: 1000 },
           gmv_ranges: ["GMV_RANGE_10000_AND_ABOVE"],
@@ -257,7 +259,7 @@ async function run(): Promise<void> {
     );
     assert(
       "H: maxPages clamped to 5",
-      lastRunPagedArgs !== null && lastRunPagedArgs.maxPages === 5,
+      captured !== undefined && captured.maxPages === 5,
     );
   }
 
@@ -370,7 +372,7 @@ async function run(): Promise<void> {
 
   // N: maxPages 0 → clamps to 1; maxPages -3 → clamps to 1
   {
-    lastRunPagedArgs = null;
+    runPagedCalls.length = 0;
     await handleDiscoverRequest({ brandId: "b1", maxPages: 0 }, {
       userId: "u1",
       getConfig: makeOkGetConfig(),
@@ -378,12 +380,13 @@ async function run(): Promise<void> {
       fetchDetail: noopFetchDetail,
       runPaged: makeOkRunPaged(),
     });
+    const captured0 = runPagedCalls[runPagedCalls.length - 1];
     assert(
       "N: maxPages 0 → recorded maxPages 1",
-      lastRunPagedArgs !== null && lastRunPagedArgs.maxPages === 1,
+      captured0 !== undefined && captured0.maxPages === 1,
     );
 
-    lastRunPagedArgs = null;
+    runPagedCalls.length = 0;
     await handleDiscoverRequest({ brandId: "b1", maxPages: -3 }, {
       userId: "u1",
       getConfig: makeOkGetConfig(),
@@ -391,9 +394,10 @@ async function run(): Promise<void> {
       fetchDetail: noopFetchDetail,
       runPaged: makeOkRunPaged(),
     });
+    const capturedNeg = runPagedCalls[runPagedCalls.length - 1];
     assert(
       "N: maxPages -3 → recorded maxPages 1",
-      lastRunPagedArgs !== null && lastRunPagedArgs.maxPages === 1,
+      capturedNeg !== undefined && capturedNeg.maxPages === 1,
     );
   }
 
