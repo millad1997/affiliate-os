@@ -162,6 +162,12 @@ export default function CreatorScoreForm({ savedBrands }: { savedBrands: SavedBr
             >
               Scored creators
             </Link>
+            <Link
+              href="/runs"
+              className="text-sm font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              Discovery runs
+            </Link>
             <LogoutButton />
           </nav>
         </div>
