@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/require-user";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getDiscoveryRun } from "@/lib/discovery-runs";
+import { listInviteDecisions } from "@/lib/invite-decisions";
 import LogoutButton from "@/components/LogoutButton";
+import InviteDecisionControls from "@/components/InviteDecisionControls";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +62,14 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   const run = result.run;
   const brandName = await resolveBrandName(user.id, run.brandId);
   const plan = run.plan;
+
+  const decisionsResult = await listInviteDecisions(run.id, user.id);
+  const decisionMap = new Map<string, "approved" | "rejected">();
+  if (decisionsResult.ok) {
+    for (const d of decisionsResult.decisions) {
+      decisionMap.set(d.creatorOpenId, d.decision);
+    }
+  }
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -127,19 +137,28 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
               {plan.invites.map((invite, i) => (
                 <li
                   key={invite.creatorOpenId}
-                  className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900"
+                  className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900"
                 >
-                  <span className="w-6 shrink-0 text-sm font-semibold tabular-nums text-zinc-400 dark:text-zinc-500">{i + 1}</span>
-                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-lg font-bold tabular-nums ${scoreBg(invite.composite)} ${scoreColor(invite.composite)}`}>
-                    {invite.composite}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">{invite.creatorOpenId}</p>
-                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{`Commission ${invite.commissionRate}%`}</p>
+                  <div className="flex items-center gap-4">
+                    <span className="w-6 shrink-0 text-sm font-semibold tabular-nums text-zinc-400 dark:text-zinc-500">{i + 1}</span>
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-lg font-bold tabular-nums ${scoreBg(invite.composite)} ${scoreColor(invite.composite)}`}>
+                      {invite.composite}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">{invite.creatorOpenId}</p>
+                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{`Commission ${invite.commissionRate}%`}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{formatGmv(invite.effectiveGmv)}</p>
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500">Effective GMV</p>
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{formatGmv(invite.effectiveGmv)}</p>
-                    <p className="text-xs text-zinc-400 dark:text-zinc-500">Effective GMV</p>
+                  <div className="flex items-center justify-end gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                    <InviteDecisionControls
+                      runId={run.id}
+                      creatorOpenId={invite.creatorOpenId}
+                      initialDecision={decisionMap.get(invite.creatorOpenId) ?? null}
+                    />
                   </div>
                 </li>
               ))}
