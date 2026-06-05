@@ -223,6 +223,18 @@ async function run(): Promise<void> {
       "G: args.maxPages === 3",
       captured !== undefined && captured.maxPages === 3,
     );
+    assert(
+      "G: body.brandId === b1",
+      r.body.ok && (r.body as { brandId: string }).brandId === "b1",
+    );
+    assert(
+      "G: body.searchBody === null",
+      r.body.ok && (r.body as { searchBody: unknown }).searchBody === null,
+    );
+    assert(
+      "G: body.maxPages === 3",
+      r.body.ok && (r.body as { maxPages: number }).maxPages === 3,
+    );
   }
 
   // H: overrides + maxPages clamped to MAX_MAX_PAGES (5)
@@ -260,6 +272,23 @@ async function run(): Promise<void> {
     assert(
       "H: maxPages clamped to 5",
       captured !== undefined && captured.maxPages === 5,
+    );
+    assert(
+      "H: body.brandId === b1",
+      r.body.ok && (r.body as { brandId: string }).brandId === "b1",
+    );
+    assert(
+      "H: body.searchBody deep-equals expected",
+      r.body.ok &&
+        deepEqual((r.body as { searchBody: unknown }).searchBody, {
+          keyword: "testosterone",
+          count_range: { count_ge: 1000 },
+          gmv_ranges: ["GMV_RANGE_10000_AND_ABOVE"],
+        }),
+    );
+    assert(
+      "H: body.maxPages === 5",
+      r.body.ok && (r.body as { maxPages: number }).maxPages === 5,
     );
   }
 

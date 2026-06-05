@@ -49,6 +49,9 @@ export type DiscoverRouteDeps = {
 export type DiscoverResponseBody =
   | {
       ok: true;
+      brandId: string;
+      searchBody: MarketplaceSearchBody | null;
+      maxPages: number;
       plan: OutreachPlan;
       pagesFetched: number;
       lastNextPageToken: string | null;
@@ -78,6 +81,7 @@ export async function handleDiscoverRequest(
   if (typeof brandId !== "string" || brandId.trim() === "") {
     return { status: 400, body: { ok: false, error: "invalid_brand_id" } };
   }
+  const trimmedBrandId = brandId.trim();
 
   // 3. Validate optional maxPages.
   let maxPages = DEFAULT_MAX_PAGES;
@@ -146,7 +150,7 @@ export async function handleDiscoverRequest(
   if (Object.keys(built).length > 0) body = built;
 
   // 6. Fetch brand config (injected — real impl is server-only).
-  const cfg = await deps.getConfig(brandId.trim(), deps.userId);
+  const cfg = await deps.getConfig(trimmedBrandId, deps.userId);
   if (!cfg.ok) {
     switch (cfg.reason) {
       case "not_found":
@@ -190,6 +194,9 @@ export async function handleDiscoverRequest(
     status: 200,
     body: {
       ok: true,
+      brandId: trimmedBrandId,
+      searchBody: body ?? null,
+      maxPages,
       plan: result.plan,
       pagesFetched: result.pagesFetched,
       lastNextPageToken: result.lastNextPageToken,
