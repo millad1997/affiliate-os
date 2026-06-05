@@ -33,6 +33,17 @@ export default function BrandForm() {
   const [error, setError] = useState<string | null>(null);
   const [successName, setSuccessName] = useState<string | null>(null);
 
+  // Discovery & outreach config — defaults match the server-side validator defaults
+  const [targetCategoryIds, setTargetCategoryIds] = useState("");
+  const [targetRegions, setTargetRegions] = useState("");
+  const [minFollowers, setMinFollowers] = useState("");
+  const [gateRegion, setGateRegion] = useState(true);
+  const [gateFollowers, setGateFollowers] = useState(false);
+  const [gateCategory, setGateCategory] = useState(false);
+  const [maxInvites, setMaxInvites] = useState("50");
+  const [commissionRate, setCommissionRate] = useState("10");
+  const [minGmvFloor, setMinGmvFloor] = useState("");
+
   const canSubmit = name.trim() && category && !loading;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -52,6 +63,15 @@ export default function BrandForm() {
           commission_context: commissionContext.trim(),
           exclusion_list: exclusionList.trim(),
           approved_claims: approvedClaims.trim(),
+          target_category_ids: targetCategoryIds,
+          target_regions: targetRegions,
+          min_followers: minFollowers,
+          gate_region: gateRegion,
+          gate_followers: gateFollowers,
+          gate_category: gateCategory,
+          max_invites: maxInvites,
+          commission_rate: commissionRate,
+          min_gmv_floor: minGmvFloor,
         }),
       });
 
@@ -70,6 +90,15 @@ export default function BrandForm() {
       setCommissionContext("");
       setExclusionList("");
       setApprovedClaims("");
+      setTargetCategoryIds("");
+      setTargetRegions("");
+      setMinFollowers("");
+      setGateRegion(true);
+      setGateFollowers(false);
+      setGateCategory(false);
+      setMaxInvites("50");
+      setCommissionRate("10");
+      setMinGmvFloor("");
       // Refresh server-component data so the new brand appears in the list
       // without a full page reload.
       router.refresh();
@@ -177,6 +206,149 @@ export default function BrandForm() {
             disabled={loading}
           />
         </label>
+
+        {/* Discovery & outreach config */}
+        <div className="flex flex-col gap-6">
+          <h3 className="border-b border-zinc-200 pb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+            Discovery &amp; outreach config
+          </h3>
+
+          <label className={labelClass}>
+            Target categories <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+            <input
+              type="text"
+              name="target_category_ids"
+              placeholder="60001, 60002"
+              value={targetCategoryIds}
+              onChange={(e) => setTargetCategoryIds(e.target.value)}
+              className={fieldClass}
+              disabled={loading}
+            />
+            <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+              Comma-separated TikTok category IDs
+            </span>
+          </label>
+
+          <label className={labelClass}>
+            Target regions <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+            <input
+              type="text"
+              name="target_regions"
+              placeholder="US"
+              value={targetRegions}
+              onChange={(e) => setTargetRegions(e.target.value)}
+              className={fieldClass}
+              disabled={loading}
+            />
+            <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+              Comma-separated region codes
+            </span>
+          </label>
+
+          <label className={labelClass}>
+            Minimum followers <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+            <input
+              type="number"
+              name="min_followers"
+              min={0}
+              step={1}
+              value={minFollowers}
+              onChange={(e) => setMinFollowers(e.target.value)}
+              className={fieldClass}
+              disabled={loading}
+            />
+          </label>
+
+          <fieldset className="flex flex-col gap-3">
+            <legend className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              Hard filters
+            </legend>
+
+            <label className="flex cursor-pointer items-center gap-3 text-sm font-normal text-zinc-800 dark:text-zinc-200">
+              <input
+                type="checkbox"
+                name="gate_region"
+                checked={gateRegion}
+                onChange={(e) => setGateRegion(e.target.checked)}
+                disabled={loading}
+                className="h-4 w-4 rounded border-zinc-300 accent-zinc-900 dark:accent-zinc-100"
+              />
+              Region is a hard filter
+            </label>
+
+            <label className="flex cursor-pointer items-center gap-3 text-sm font-normal text-zinc-800 dark:text-zinc-200">
+              <input
+                type="checkbox"
+                name="gate_followers"
+                checked={gateFollowers}
+                onChange={(e) => setGateFollowers(e.target.checked)}
+                disabled={loading}
+                className="h-4 w-4 rounded border-zinc-300 accent-zinc-900 dark:accent-zinc-100"
+              />
+              Followers is a hard filter
+            </label>
+
+            <label className="flex cursor-pointer items-center gap-3 text-sm font-normal text-zinc-800 dark:text-zinc-200">
+              <input
+                type="checkbox"
+                name="gate_category"
+                checked={gateCategory}
+                onChange={(e) => setGateCategory(e.target.checked)}
+                disabled={loading}
+                className="h-4 w-4 rounded border-zinc-300 accent-zinc-900 dark:accent-zinc-100"
+              />
+              Category is a hard filter
+            </label>
+          </fieldset>
+
+          <label className={labelClass}>
+            Max invites
+            <input
+              type="number"
+              name="max_invites"
+              min={0}
+              step={1}
+              value={maxInvites}
+              onChange={(e) => setMaxInvites(e.target.value)}
+              className={fieldClass}
+              disabled={loading}
+            />
+          </label>
+
+          <label className={labelClass}>
+            Commission rate
+            <input
+              type="number"
+              name="commission_rate"
+              min={0}
+              step="any"
+              value={commissionRate}
+              onChange={(e) => setCommissionRate(e.target.value)}
+              className={fieldClass}
+              disabled={loading}
+            />
+            <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+              Flat %, e.g. 15
+            </span>
+          </label>
+
+          <label className={labelClass}>
+            Minimum GMV floor <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+            <input
+              type="number"
+              name="min_gmv_floor"
+              min={0}
+              step="any"
+              value={minGmvFloor}
+              onChange={(e) => setMinGmvFloor(e.target.value)}
+              className={fieldClass}
+              disabled={loading}
+            />
+            <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+              Blank = no floor
+            </span>
+          </label>
+        </div>
 
         <button
           type="submit"

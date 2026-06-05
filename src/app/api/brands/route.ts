@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
+import { parseBrandConfigFields } from "@/lib/brand-config-input-parse";
 
 const BRAND_CATEGORIES = [
   "Supplements & Wellness",
@@ -79,6 +80,9 @@ export async function POST(request: Request) {
   const exclusionList = clampText(pickString(b, "exclusion_list"), MAX_TEXT_FIELD);
   const approvedClaims = clampText(pickString(b, "approved_claims"), MAX_TEXT_FIELD);
 
+  const parsed = parseBrandConfigFields(b);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
   // SECURITY: user_id is set from the server-validated session above — never
   // from the request body. That keeps the row's owner authoritative; a client
   // cannot forge a user_id for someone else, even by manipulating the JSON.
@@ -93,6 +97,7 @@ export async function POST(request: Request) {
       commission_context: commissionContext || null,
       exclusion_list: exclusionList || null,
       approved_claims: approvedClaims || null,
+      ...parsed.fields,
     })
     .select("id, name")
     .single();
