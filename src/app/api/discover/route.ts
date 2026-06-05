@@ -7,6 +7,8 @@
 //     response.
 //   • all request parsing, validation, and response shaping live in the pure,
 //     tested core; this file is glue only.
+//   • successful runs are persisted best-effort (a store failure never blocks
+//     the user's result); the persisted run is owned by the session userId.
 
 import { NextResponse } from "next/server";
 import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
@@ -14,6 +16,8 @@ import { getBrandConfig } from "@/lib/brand-config-read";
 import { makeFetchCreatorSearch } from "@/lib/tiktok-creator-search-fetcher";
 import { makeFetchCreatorDetail } from "@/lib/tiktok-creator-fetcher";
 import { handleDiscoverRequest } from "@/lib/discover-route-core";
+import { buildDiscoveryRunInsert } from "@/lib/discovery-run-row";
+import { storeDiscoveryRun } from "@/lib/discovery-runs";
 
 export async function POST(request: Request) {
   const authClient = await getSupabaseAuthServerClient();
@@ -48,5 +52,12 @@ export async function POST(request: Request) {
     fetchDetail,
   });
 
-  return NextResponse.json(result.body, { status: result.status });
+  // Persist successful runs best-effort: a store failure degrades to runId:null and
+  // never blocks the response. The persisted run's user_id is the session userId above.
+  const body = result.body;
+  if (result.status === 200 && body.ok) {
+    const stored = await storeDiscoveryRun(buildDiscoveryRunInsert(userId, body));
+    return NextResponse.json({ ...body, runId: stored.ok ? stored.id : null }, { status: 200 });
+  }
+  return NextResponse.json(body, { status: result.status });
 }
