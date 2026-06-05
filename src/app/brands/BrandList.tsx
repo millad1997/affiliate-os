@@ -11,6 +11,15 @@ export type Brand = {
   exclusion_list: string | null;
   approved_claims: string | null;
   created_at: string;
+  target_category_ids: string[];
+  target_regions: string[];
+  min_followers: number | null;
+  gate_region: boolean;
+  gate_followers: boolean;
+  gate_category: boolean;
+  max_invites: number;
+  commission_rate: number | string;
+  min_gmv_floor: number | string | null;
 };
 
 function relativeTime(iso: string): string {
@@ -75,6 +84,40 @@ function BrandRow({ brand }: { brand: Brand }) {
           <DetailRow label="Commission context" value={brand.commission_context} />
           <DetailRow label="Exclusion list" value={brand.exclusion_list} />
           <DetailRow label="Approved claims" value={brand.approved_claims} />
+
+          <div className="flex flex-col gap-5 border-t border-zinc-100 pt-5 dark:border-zinc-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              Discovery &amp; outreach config
+            </p>
+            <DetailRow
+              label="Target categories"
+              value={brand.target_category_ids.length ? brand.target_category_ids.join(", ") : "None"}
+            />
+            <DetailRow
+              label="Target regions"
+              value={brand.target_regions.length ? brand.target_regions.join(", ") : "None"}
+            />
+            <DetailRow
+              label="Minimum followers"
+              value={brand.min_followers === null ? "Any" : brand.min_followers.toLocaleString()}
+            />
+            <DetailRow
+              label="Hard filters"
+              value={(() => {
+                const filters: string[] = [];
+                if (brand.gate_region) filters.push("Region");
+                if (brand.gate_followers) filters.push("Followers");
+                if (brand.gate_category) filters.push("Category");
+                return filters.length === 0 ? "None" : filters.join(", ");
+              })()}
+            />
+            <DetailRow label="Max invites" value={String(brand.max_invites)} />
+            <DetailRow label="Commission rate" value={`${brand.commission_rate}%`} />
+            <DetailRow
+              label="Minimum GMV floor"
+              value={brand.min_gmv_floor === null ? "None" : Number(brand.min_gmv_floor).toLocaleString()}
+            />
+          </div>
         </div>
       )}
     </li>
