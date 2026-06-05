@@ -107,3 +107,66 @@ export async function getDiscoveryRun(
     return { ok: false, reason: "query_failed" };
   }
 }
+
+export type DiscoveryRunSummary = {
+  id: string;
+  brandId: string;
+  createdAt: string;
+  maxPages: number;
+  pagesFetched: number;
+  stoppedEarly: boolean;
+  stopReason: { code: number; message: string } | null;
+  creatorCount: number;
+};
+
+type DiscoveryRunSummaryRow = {
+  id: string;
+  brand_id: string;
+  created_at: string;
+  max_pages: number;
+  pages_fetched: number;
+  stopped_early: boolean;
+  stop_reason: { code: number; message: string } | null;
+  creator_count: number;
+};
+
+const SUMMARY_SELECT_COLUMNS =
+  "id, brand_id, created_at, max_pages, pages_fetched, stopped_early, stop_reason, creator_count";
+
+function rowToSummary(row: DiscoveryRunSummaryRow): DiscoveryRunSummary {
+  return {
+    id: row.id,
+    brandId: row.brand_id,
+    createdAt: row.created_at,
+    maxPages: row.max_pages,
+    pagesFetched: row.pages_fetched,
+    stoppedEarly: row.stopped_early,
+    stopReason: row.stop_reason,
+    creatorCount: row.creator_count,
+  };
+}
+
+export type ListDiscoveryRunsResult =
+  | { ok: true; runs: DiscoveryRunSummary[] }
+  | { ok: false; reason: "query_failed" };
+
+// List a user's discovery runs, newest first, scoped by user_id (the .eq is what enforces
+// tenant isolation; service-role bypasses RLS). Summary projection omits the heavy
+// plan/overrides JSON. userId MUST come from the server-validated session.
+export async function listDiscoveryRuns(
+  userId: string,
+): Promise<ListDiscoveryRunsResult> {
+  try {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("discovery_runs")
+      .select(SUMMARY_SELECT_COLUMNS)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .returns<DiscoveryRunSummaryRow[]>();
+    if (error) return { ok: false, reason: "query_failed" };
+    return { ok: true, runs: (data ?? []).map(rowToSummary) };
+  } catch {
+    return { ok: false, reason: "query_failed" };
+  }
+}
