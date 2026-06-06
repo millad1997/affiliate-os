@@ -4,7 +4,9 @@
 // `import "server-only"`, safe under plain npx tsx. It upholds three invariants:
 //   • Same-origin guard (CSRF defense): rejects requests whose Sec-Fetch-Site is
 //     cross-site/same-site, or whose Origin host does not match the request Host.
-//     This is defense-in-depth atop the SameSite=Lax session cookie.
+//     This is defense-in-depth atop the SameSite=Lax session cookie. The guard now
+//     lives in the shared ./same-origin-guard module (isSameOrigin), used by every
+//     write route.
 //   • userId is taken ONLY from deps (the server-validated session), NEVER from the
 //     request body — a body cannot make the write act as another tenant.
 //   • the actual write is delegated to an injected store (real impl is server-only and
@@ -12,6 +14,7 @@
 //     are fixed constants; no header, body value, id, or secret ever appears in a response.
 
 import type { StoreInviteDecisionResult } from "./invite-decisions";
+import { isSameOrigin, type SameOriginHeaders } from "./same-origin-guard";
 
 type StoreFn = (args: {
   runId: string;
@@ -20,11 +23,9 @@ type StoreFn = (args: {
   decision: string;
 }) => Promise<StoreInviteDecisionResult>;
 
-export type InviteDecisionRequestHeaders = {
-  origin: string | null;
-  host: string | null;
-  secFetchSite: string | null;
-};
+// Re-exported alias keeps the existing route-shell import stable; structurally
+// identical to the shared SameOriginHeaders.
+export type InviteDecisionRequestHeaders = SameOriginHeaders;
 
 export type InviteDecisionRouteDeps = {
   userId: string; // MUST originate from the server-validated session
@@ -39,31 +40,6 @@ export type InviteDecisionRouteResult = {
   status: number;
   body: InviteDecisionResponseBody;
 };
-
-// Same-origin guard. Returns true if the request is allowed to proceed.
-// Sec-Fetch-Site (when present) is the strongest signal: only same-origin and none
-// (direct navigation / non-browser) are allowed. Origin (when present) must match the
-// request Host (scheme-agnostic host compare). When neither header is present, allow —
-// browser CSRF is additionally gated by the SameSite session cookie.
-function isSameOrigin(headers: InviteDecisionRequestHeaders): boolean {
-  const { origin, host, secFetchSite } = headers;
-  if (secFetchSite !== null) {
-    if (secFetchSite !== "same-origin" && secFetchSite !== "none") {
-      return false;
-    }
-  }
-  if (origin !== null) {
-    if (host === null) return false;
-    let originHost: string | null = null;
-    try {
-      originHost = new URL(origin).host;
-    } catch {
-      return false;
-    }
-    if (originHost !== host) return false;
-  }
-  return true;
-}
 
 export async function handleInviteDecisionRequest(
   headers: InviteDecisionRequestHeaders,
