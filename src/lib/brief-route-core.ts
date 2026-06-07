@@ -32,6 +32,15 @@ export type BriefRouteDeps = {
   // §3.7 compliance scan over the built brief's free prose. Like buildBrief, the injected
   // generate throws on adapter failure; the core catches it and soft-fails to scan: null.
   scanBrief: (brand: BrandBriefContext, brief: ContentBrief) => Promise<ScanComplianceResult>;
+  // §3.7 audit persistence. Best-effort side-effect: the core awaits it but swallows failures
+  // so an audit-write hiccup never discards a brief the user already paid for. Receives the
+  // VALIDATED, in-plan ids (never the raw body); userId is captured by the shell's closure.
+  persistBrief: (args: {
+    runId: string;
+    creatorOpenId: string;
+    brief: ContentBrief;
+    scan: ComplianceScan | null;
+  }) => Promise<void>;
 };
 
 export type BriefResponseBody =
@@ -134,6 +143,21 @@ export async function handleBriefRequest(
     } catch {
       // adapter/transport failure => scan unavailable; brief still returned.
     }
+
+    // 9. Persist to the append-only §3.7 audit trail. Best-effort: the core awaits the write
+    //    but swallows any failure so an audit-write hiccup never discards a brief the user
+    //    already paid for. Uses the validated, in-plan ids (never the raw body).
+    try {
+      await deps.persistBrief({
+        runId: trimmedRunId,
+        creatorOpenId: trimmedCreatorOpenId,
+        brief: briefResult.brief,
+        scan,
+      });
+    } catch {
+      // audit write failed; do not block the response.
+    }
+
     return { status: 200, body: { ok: true, brief: briefResult.brief, scan } };
   }
   switch (briefResult.reason) {

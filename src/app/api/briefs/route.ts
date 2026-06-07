@@ -10,6 +10,8 @@
 //     before any paid call.
 //   • the §3.7 compliance scan is a second paid call on the same approved path; it soft-fails
 //     to scan: null inside the core and never blocks an already-built brief.
+//   • on success the brief + scan outcome are persisted to the append-only §3.7 audit trail
+//     (storeBrief), as a best-effort write that never blocks the response.
 import { NextResponse } from "next/server";
 import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
 import { getDiscoveryRun } from "@/lib/discovery-runs";
@@ -17,6 +19,7 @@ import { listInviteDecisions } from "@/lib/invite-decisions";
 import { getBrandContent } from "@/lib/brand-content-read";
 import { buildContentBrief } from "@/lib/content-brief";
 import { scanBriefCompliance } from "@/lib/compliance-scan";
+import { storeBrief } from "@/lib/briefs";
 import { makeAnthropicGenerate } from "@/lib/anthropic-generate";
 import { handleBriefRequest } from "@/lib/brief-route-core";
 
@@ -53,6 +56,8 @@ export async function POST(request: Request) {
       getBrandContent,
       buildBrief: (brand) => buildContentBrief(brand, generate),
       scanBrief: (brand, brief) => scanBriefCompliance(brand, brief, generate),
+      persistBrief: ({ runId, creatorOpenId, brief, scan }) =>
+        storeBrief({ runId, userId, creatorOpenId, brief, scan }).then(() => undefined),
     },
   );
 

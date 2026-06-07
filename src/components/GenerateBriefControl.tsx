@@ -63,14 +63,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function GenerateBriefControl({
   runId,
   creatorOpenId,
+  initialBrief = null,
+  initialScan = null,
 }: {
   runId: string;
   creatorOpenId: string;
+  initialBrief?: ContentBrief | null;
+  initialScan?: ComplianceScan | null;
 }) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<boolean>(false);
-  const [brief, setBrief] = useState<ContentBrief | null>(null);
-  const [scan, setScan] = useState<ComplianceScan | null>(null);
+  const [brief, setBrief] = useState<ContentBrief | null>(initialBrief);
+  const [scan, setScan] = useState<ComplianceScan | null>(initialScan);
 
   async function generate(): Promise<void> {
     if (loading) return;

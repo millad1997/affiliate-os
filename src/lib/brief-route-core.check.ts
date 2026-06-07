@@ -3,9 +3,11 @@
 // Golden-vector check for handleBriefRequest. Pure module → run with plain:
 //   npx tsx src/lib/brief-route-core.check.ts
 // Fixtures are spies that record calls so we can assert the cost guard never lets a paid
-// buildBrief fire for a non-member / non-approved creator, that userId always comes
-// from deps (session) never the request body, and that the §3.7 scan runs only on a
-// successfully built brief and soft-fails to scan: null without discarding the brief.
+// buildBrief fire for a non-member / non-approved creator, that userId always comes from deps
+// (session) never the request body, that the §3.7 scan runs only on a successfully built brief
+// and soft-fails to scan: null without discarding the brief, and that the §3.7 audit persist
+// runs only on success with the validated ids and is best-effort (a persist throw never breaks
+// the response).
 import { handleBriefRequest, type BriefRouteDeps } from "./brief-route-core";
 import type { SameOriginHeaders } from "./same-origin-guard";
 import type { GetDiscoveryRunResult, DiscoveryRun } from "./discovery-runs";
@@ -116,10 +118,11 @@ type Calls = {
   getBrandContent: Array<[string, string]>;
   buildBrief: string[]; // brand.name per call
   scanBrief: string[]; // brief.hook per call
+  persistBrief: Array<{ runId: string; creatorOpenId: string; hook: string; scanVerdict: string | null }>;
 };
 
 function freshCalls(): Calls {
-  return { getRun: [], getDecisions: [], getBrandContent: [], buildBrief: [], scanBrief: [] };
+  return { getRun: [], getDecisions: [], getBrandContent: [], buildBrief: [], scanBrief: [], persistBrief: [] };
 }
 
 function makeDeps(
@@ -131,6 +134,7 @@ function makeDeps(
     brand?: GetBrandContentResult;
     brief?: BuildBriefResult | "throw";
     scan?: ScanComplianceResult | "throw";
+    persist?: "throw";
   } = {},
 ): BriefRouteDeps {
   return {
@@ -156,6 +160,15 @@ function makeDeps(
       calls.scanBrief.push(brief.hook);
       if (opts.scan === "throw") throw new Error("anthropic_http_500");
       return opts.scan ?? SCAN_PASS;
+    },
+    persistBrief: async ({ runId, creatorOpenId, brief, scan }) => {
+      calls.persistBrief.push({
+        runId,
+        creatorOpenId,
+        hook: brief.hook,
+        scanVerdict: scan ? scan.verdict : null,
+      });
+      if (opts.persist === "throw") throw new Error("store_failed");
     },
   };
 }
@@ -347,11 +360,59 @@ async function main() {
     check("27 scan malformed -> 200 ok, scan null", r.status === 200 && r.body.ok === true && r.body.scan === null);
   }
 
-  // 28. scan does NOT run when the brief build fails (no scan spend on a brief that never built).
+  // 28. scan does NOT run when the brief build fails (no spend on a brief that never built).
   {
     const calls = freshCalls();
     const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(calls, { brief: { ok: false, reason: "no_claims" } }));
     check("28 build fails -> scanBrief NOT called", r.status === 422 && calls.scanBrief.length === 0);
+  }
+
+  // 29. happy path persists once, with the validated ids + built brief + scan verdict.
+  {
+    const calls = freshCalls();
+    const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(calls));
+    check("29 persistBrief called once", r.status === 200 && calls.persistBrief.length === 1);
+    check("29 persist got built brief hook", calls.persistBrief[0].hook === "Sleep better tonight");
+    check("29 persist scanVerdict pass", calls.persistBrief[0].scanVerdict === "pass");
+    check("29 persist got run + creator ids", calls.persistBrief[0].runId === "run-1" && calls.persistBrief[0].creatorOpenId === CREATOR_A);
+  }
+
+  // 30. a flagged scan is recorded in the audit persist call.
+  {
+    const calls = freshCalls();
+    await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(calls, { scan: SCAN_FLAGGED }));
+    check("30 persist scanVerdict flagged", calls.persistBrief.length === 1 && calls.persistBrief[0].scanVerdict === "flagged");
+  }
+
+  // 31. persistBrief THROWS -> soft-fail: still 200, brief + scan still returned.
+  {
+    const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(freshCalls(), { persist: "throw" }));
+    check("31 persist throws -> 200 ok", r.status === 200 && r.body.ok === true);
+    check("31 persist throws -> brief present", r.body.ok === true && r.body.brief.hook === "Sleep better tonight");
+    check("31 persist throws -> scan present", r.body.ok === true && r.body.scan !== null && r.body.scan.verdict === "pass");
+  }
+
+  // 32. scan soft-fail (null) is recorded as a null verdict in the audit persist call.
+  {
+    const calls = freshCalls();
+    const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(calls, { scan: "throw" }));
+    check("32 scan soft-fail -> still 200", r.status === 200 && r.body.ok === true);
+    check("32 scan soft-fail -> persist scanVerdict null", calls.persistBrief.length === 1 && calls.persistBrief[0].scanVerdict === null);
+  }
+
+  // 33. build fails -> persistBrief NOT called (no audit row for a brief that never built).
+  {
+    const calls = freshCalls();
+    await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(calls, { brief: { ok: false, reason: "no_claims" } }));
+    check("33 build fails -> persistBrief NOT called", calls.persistBrief.length === 0);
+  }
+
+  // 34. the core passes VALIDATED (trimmed) ids to persistBrief, not the raw body.
+  {
+    const calls = freshCalls();
+    await handleBriefRequest(ALLOW, { runId: "  run-1  ", creatorOpenId: `  ${CREATOR_A}  ` }, makeDeps(calls));
+    check("34 persist got trimmed runId", calls.persistBrief.length === 1 && calls.persistBrief[0].runId === "run-1");
+    check("34 persist got trimmed creatorOpenId", calls.persistBrief[0].creatorOpenId === CREATOR_A);
   }
 
   console.log(`\nPASSED ${passed}/${passed + failed}`);

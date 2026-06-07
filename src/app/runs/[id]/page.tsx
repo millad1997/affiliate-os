@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/require-user";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getDiscoveryRun } from "@/lib/discovery-runs";
 import { listInviteDecisions } from "@/lib/invite-decisions";
+import { listBriefsForRun, type StoredBrief } from "@/lib/briefs";
 import LogoutButton from "@/components/LogoutButton";
 import InviteDecisionControls from "@/components/InviteDecisionControls";
 import GenerateBriefControl from "@/components/GenerateBriefControl";
@@ -69,6 +70,18 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   if (decisionsResult.ok) {
     for (const d of decisionsResult.decisions) {
       decisionMap.set(d.creatorOpenId, d.decision);
+    }
+  }
+
+  // Hydrate each approved creator's most-recent persisted brief (newest-first from the audit
+  // trail) so it renders on page load WITHOUT a fresh paid /api/briefs call.
+  const briefsResult = await listBriefsForRun(run.id, user.id);
+  const latestBriefByCreator = new Map<string, StoredBrief>();
+  if (briefsResult.ok) {
+    for (const b of briefsResult.briefs) {
+      if (!latestBriefByCreator.has(b.creatorOpenId)) {
+        latestBriefByCreator.set(b.creatorOpenId, b);
+      }
     }
   }
 
@@ -166,6 +179,8 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                       <GenerateBriefControl
                         runId={run.id}
                         creatorOpenId={invite.creatorOpenId}
+                        initialBrief={latestBriefByCreator.get(invite.creatorOpenId)?.brief ?? null}
+                        initialScan={latestBriefByCreator.get(invite.creatorOpenId)?.scan ?? null}
                       />
                     </div>
                   )}
