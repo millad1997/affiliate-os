@@ -8,12 +8,15 @@
 //     is never read, logged, or returned here.
 //   • the core enforces run ownership + plan membership + an "approved"-decision cost guard
 //     before any paid call.
+//   • the §3.7 compliance scan is a second paid call on the same approved path; it soft-fails
+//     to scan: null inside the core and never blocks an already-built brief.
 import { NextResponse } from "next/server";
 import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
 import { getDiscoveryRun } from "@/lib/discovery-runs";
 import { listInviteDecisions } from "@/lib/invite-decisions";
 import { getBrandContent } from "@/lib/brand-content-read";
 import { buildContentBrief } from "@/lib/content-brief";
+import { scanBriefCompliance } from "@/lib/compliance-scan";
 import { makeAnthropicGenerate } from "@/lib/anthropic-generate";
 import { handleBriefRequest } from "@/lib/brief-route-core";
 
@@ -49,6 +52,7 @@ export async function POST(request: Request) {
       getDecisions: listInviteDecisions,
       getBrandContent,
       buildBrief: (brand) => buildContentBrief(brand, generate),
+      scanBrief: (brand, brief) => scanBriefCompliance(brand, brief, generate),
     },
   );
 

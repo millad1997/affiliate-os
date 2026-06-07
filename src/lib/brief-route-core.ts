@@ -20,6 +20,7 @@ import type { GetDiscoveryRunResult } from "./discovery-runs";
 import type { ListInviteDecisionsResult } from "./invite-decisions";
 import type { GetBrandContentResult, BrandBriefContext } from "./brand-content-read";
 import type { BuildBriefResult, ContentBrief } from "./content-brief";
+import type { ScanComplianceResult, ComplianceScan } from "./compliance-scan";
 
 export type BriefRouteDeps = {
   userId: string; // MUST originate from the server-validated session
@@ -28,10 +29,13 @@ export type BriefRouteDeps = {
   getBrandContent: (brandId: string, userId: string) => Promise<GetBrandContentResult>;
   // Throws on adapter/transport failure (api key / non-2xx / no text); the core catches it.
   buildBrief: (brand: BrandBriefContext) => Promise<BuildBriefResult>;
+  // §3.7 compliance scan over the built brief's free prose. Like buildBrief, the injected
+  // generate throws on adapter failure; the core catches it and soft-fails to scan: null.
+  scanBrief: (brand: BrandBriefContext, brief: ContentBrief) => Promise<ScanComplianceResult>;
 };
 
 export type BriefResponseBody =
-  | { ok: true; brief: ContentBrief }
+  | { ok: true; brief: ContentBrief; scan: ComplianceScan | null }
   | { ok: false; error: string };
 
 export type BriefRouteResult = {
@@ -117,7 +121,20 @@ export async function handleBriefRequest(
   }
 
   if (briefResult.ok) {
-    return { status: 200, body: { ok: true, brief: briefResult.brief } };
+    // 8. §3.7 compliance scan over the brief's free prose — a SECOND paid call on the same
+    //    already-guarded approved path. It is an OVERLAY on an already-valid brief: if the
+    //    reviewer call throws (adapter) or returns malformed, we return the brief with
+    //    scan: null (compliance check unavailable) rather than discarding a brief we already
+    //    paid for. The surface (UI) flags scan: null explicitly so it is never silent.
+    let scan: ComplianceScan | null = null;
+    try {
+      const scanResult = await deps.scanBrief(brand, briefResult.brief);
+      if (scanResult.ok) scan = scanResult.scan;
+      // scanResult not ok (parse/malformed) => leave scan null (unavailable).
+    } catch {
+      // adapter/transport failure => scan unavailable; brief still returned.
+    }
+    return { status: 200, body: { ok: true, brief: briefResult.brief, scan } };
   }
   switch (briefResult.reason) {
     case "no_claims":

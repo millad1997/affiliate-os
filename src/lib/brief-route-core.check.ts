@@ -3,8 +3,9 @@
 // Golden-vector check for handleBriefRequest. Pure module → run with plain:
 //   npx tsx src/lib/brief-route-core.check.ts
 // Fixtures are spies that record calls so we can assert the cost guard never lets a paid
-// buildBrief fire for a non-member / non-approved creator, and that userId always comes
-// from deps (session), never the request body.
+// buildBrief fire for a non-member / non-approved creator, that userId always comes
+// from deps (session) never the request body, and that the §3.7 scan runs only on a
+// successfully built brief and soft-fails to scan: null without discarding the brief.
 import { handleBriefRequest, type BriefRouteDeps } from "./brief-route-core";
 import type { SameOriginHeaders } from "./same-origin-guard";
 import type { GetDiscoveryRunResult, DiscoveryRun } from "./discovery-runs";
@@ -15,6 +16,7 @@ import type {
 } from "./invite-decisions";
 import type { GetBrandContentResult } from "./brand-content-read";
 import type { BuildBriefResult } from "./content-brief";
+import type { ScanComplianceResult } from "./compliance-scan";
 
 const SESSION_USER = "session-user-1";
 const BRAND_ID = "brand-vireo";
@@ -86,15 +88,38 @@ const BRIEF_OK: BuildBriefResult = {
   },
 };
 
+const SCAN_PASS: ScanComplianceResult = {
+  ok: true,
+  scan: { verdict: "pass", findings: [] },
+};
+
+const SCAN_FLAGGED: ScanComplianceResult = {
+  ok: true,
+  scan: {
+    verdict: "flagged",
+    findings: [
+      {
+        field: "hook",
+        index: null,
+        quote: "Sleep better tonight",
+        category: "overstated_claim",
+        severity: "medium",
+        rationale: "stronger than the approved claim",
+      },
+    ],
+  },
+};
+
 type Calls = {
   getRun: Array<[string, string]>;
   getDecisions: Array<[string, string]>;
   getBrandContent: Array<[string, string]>;
   buildBrief: string[]; // brand.name per call
+  scanBrief: string[]; // brief.hook per call
 };
 
 function freshCalls(): Calls {
-  return { getRun: [], getDecisions: [], getBrandContent: [], buildBrief: [] };
+  return { getRun: [], getDecisions: [], getBrandContent: [], buildBrief: [], scanBrief: [] };
 }
 
 function makeDeps(
@@ -105,6 +130,7 @@ function makeDeps(
     decisions?: ListInviteDecisionsResult;
     brand?: GetBrandContentResult;
     brief?: BuildBriefResult | "throw";
+    scan?: ScanComplianceResult | "throw";
   } = {},
 ): BriefRouteDeps {
   return {
@@ -125,6 +151,11 @@ function makeDeps(
       calls.buildBrief.push(brand.name);
       if (opts.brief === "throw") throw new Error("anthropic_http_500");
       return opts.brief ?? BRIEF_OK;
+    },
+    scanBrief: async (_brand, brief) => {
+      calls.scanBrief.push(brief.hook);
+      if (opts.scan === "throw") throw new Error("anthropic_http_500");
+      return opts.scan ?? SCAN_PASS;
     },
   };
 }
@@ -285,6 +316,42 @@ async function main() {
     const r = await handleBriefRequest(ALLOW, { runId: "  run-1  ", creatorOpenId: `  ${CREATOR_A}  ` }, makeDeps(calls));
     check("23 trimmed ids -> 200 ok", r.status === 200);
     check("23 getRun got trimmed runId", calls.getRun[0][0] === "run-1");
+  }
+
+  // 24. happy path runs the scan on the built brief and attaches it (default = pass).
+  {
+    const calls = freshCalls();
+    const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(calls));
+    check("24 scanBrief called once with built brief", calls.scanBrief.length === 1 && calls.scanBrief[0] === "Sleep better tonight");
+    check("24 scan attached, verdict pass", r.body.ok === true && r.body.scan !== null && r.body.scan.verdict === "pass");
+  }
+
+  // 25. a flagged scan surfaces through the response body.
+  {
+    const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(freshCalls(), { scan: SCAN_FLAGGED }));
+    check("25 flagged scan -> verdict flagged", r.body.ok === true && r.body.scan !== null && r.body.scan.verdict === "flagged");
+    check("25 flagged scan -> one finding", r.body.ok === true && r.body.scan !== null && r.body.scan.findings.length === 1);
+  }
+
+  // 26. scan THROWS -> soft-fail: 200, brief returned, scan null (a good brief is never discarded).
+  {
+    const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(freshCalls(), { scan: "throw" }));
+    check("26 scan throws -> 200 ok", r.status === 200 && r.body.ok === true);
+    check("26 scan throws -> brief still present", r.body.ok === true && r.body.brief.hook === "Sleep better tonight");
+    check("26 scan throws -> scan null", r.body.ok === true && r.body.scan === null);
+  }
+
+  // 27. scan malformed -> soft-fail to scan null (brief still returned).
+  {
+    const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(freshCalls(), { scan: { ok: false, reason: "llm_malformed" } }));
+    check("27 scan malformed -> 200 ok, scan null", r.status === 200 && r.body.ok === true && r.body.scan === null);
+  }
+
+  // 28. scan does NOT run when the brief build fails (no scan spend on a brief that never built).
+  {
+    const calls = freshCalls();
+    const r = await handleBriefRequest(ALLOW, { runId: "run-1", creatorOpenId: CREATOR_A }, makeDeps(calls, { brief: { ok: false, reason: "no_claims" } }));
+    check("28 build fails -> scanBrief NOT called", r.status === 422 && calls.scanBrief.length === 0);
   }
 
   console.log(`\nPASSED ${passed}/${passed + failed}`);
