@@ -142,7 +142,9 @@ function check(name: string, cond: boolean) {
 }
 
 function bodyErr(body: { ok: boolean } & Record<string, unknown>): string {
-  return body.ok ? "(ok)" : String((body as { error: string }).error);
+  if (body.ok) return "(ok)";
+  const err = body["error"];
+  return typeof err === "string" ? err : String(err);
 }
 
 async function main() {

@@ -6,6 +6,7 @@ import { getDiscoveryRun } from "@/lib/discovery-runs";
 import { listInviteDecisions } from "@/lib/invite-decisions";
 import LogoutButton from "@/components/LogoutButton";
 import InviteDecisionControls from "@/components/InviteDecisionControls";
+import GenerateBriefControl from "@/components/GenerateBriefControl";
 
 export const dynamic = "force-dynamic";
 
@@ -160,6 +161,14 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                       initialDecision={decisionMap.get(invite.creatorOpenId) ?? null}
                     />
                   </div>
+                  {decisionMap.get(invite.creatorOpenId) === "approved" && (
+                    <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                      <GenerateBriefControl
+                        runId={run.id}
+                        creatorOpenId={invite.creatorOpenId}
+                      />
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
