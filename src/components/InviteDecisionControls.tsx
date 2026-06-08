@@ -21,7 +21,7 @@ export default function InviteDecisionControls({
 }) {
   const router = useRouter();
   const [decision, setDecision] = useState<Decision | null>(initialDecision);
-  const [loading, setLoading] = useState<Decision | null>(null);
+  const [loading, setLoading] = useState<Decision | "clear" | null>(null);
   const [error, setError] = useState<boolean>(false);
 
   async function submit(next: Decision): Promise<void> {
@@ -40,6 +40,30 @@ export default function InviteDecisionControls({
         return;
       }
       setDecision(next);
+      router.refresh();
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function clear(): Promise<void> {
+    if (loading !== null) return;
+    setLoading("clear");
+    setError(false);
+    try {
+      const res = await fetch("/api/invite-decisions", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runId, creatorOpenId }),
+      });
+      const data = (await res.json()) as { ok?: boolean };
+      if (!res.ok || data.ok !== true) {
+        setError(true);
+        return;
+      }
+      setDecision(null);
       router.refresh();
     } catch {
       setError(true);
@@ -82,6 +106,16 @@ export default function InviteDecisionControls({
       >
         {loading === "rejected" ? "…" : "Reject"}
       </button>
+      {decision !== null && (
+        <button
+          type="button"
+          onClick={clear}
+          disabled={loading !== null}
+          className={`${baseBtn} ${inactiveBtn}`}
+        >
+          {loading === "clear" ? "…" : "Clear"}
+        </button>
+      )}
     </div>
   );
 }
