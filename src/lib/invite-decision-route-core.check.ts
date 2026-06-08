@@ -3,11 +3,13 @@
 // (If this ever demands --conditions=react-server, a server-only value-import leaked in.)
 
 import {
+  handleApproveAllPendingRequest,
   handleClearInviteDecisionRequest,
   handleInviteDecisionRequest,
   type InviteDecisionRequestHeaders,
 } from "./invite-decision-route-core";
 import type {
+  ApproveAllPendingResult,
   DeleteInviteDecisionResult,
   StoreInviteDecisionResult,
 } from "./invite-decisions";
@@ -55,6 +57,18 @@ function makeFakeClear(result: DeleteInviteDecisionResult) {
     return result;
   };
   return { clear, calls };
+}
+
+const APPROVE_ALL_BODY = { runId: "run_1" };
+
+type ApproveAllArgs = { runId: string; userId: string };
+function makeFakeApproveAll(result: ApproveAllPendingResult) {
+  const calls: ApproveAllArgs[] = [];
+  const approveAll = async (args: ApproveAllArgs): Promise<ApproveAllPendingResult> => {
+    calls.push(args);
+    return result;
+  };
+  return { approveAll, calls };
 }
 
 async function main(): Promise<void> {
@@ -310,6 +324,84 @@ async function main(): Promise<void> {
     expect("27 clear got session userId, not body's", f.calls.length === 1 && f.calls[0].userId === "session_user");
     expect("27 clear got trimmed runId", f.calls.length === 1 && f.calls[0].runId === "run_1");
     expect("27 clear got trimmed creatorOpenId", f.calls.length === 1 && f.calls[0].creatorOpenId === "creator_1");
+  }
+
+  // ============ handleApproveAllPendingRequest (bulk approve) ============
+
+  // --- CSRF guard ---
+  {
+    const f = makeFakeApproveAll({ ok: true, approved: 0 });
+    const r = await handleApproveAllPendingRequest(
+      { origin: "https://evil.com", host: "app.example.com", secFetchSite: "cross-site" },
+      APPROVE_ALL_BODY,
+      { userId: "u", approveAll: f.approveAll },
+    );
+    expect(
+      "28 approve-all cross-site -> 403 forbidden",
+      r.status === 403 && r.body.ok === false && r.body.error === "forbidden",
+    );
+    expect("28 approve-all cross-site -> approveAll NOT called", f.calls.length === 0);
+  }
+
+  // --- Body validation ---
+  {
+    const f = makeFakeApproveAll({ ok: true, approved: 0 });
+    const r = await handleApproveAllPendingRequest(OK_HEADERS, null, { userId: "u", approveAll: f.approveAll });
+    expect(
+      "29 approve-all null body -> 400 invalid_request",
+      r.status === 400 && r.body.ok === false && r.body.error === "invalid_request" && f.calls.length === 0,
+    );
+  }
+  {
+    const f = makeFakeApproveAll({ ok: true, approved: 0 });
+    const r = await handleApproveAllPendingRequest(OK_HEADERS, {}, { userId: "u", approveAll: f.approveAll });
+    expect(
+      "30 approve-all missing runId -> 400 invalid_run_id",
+      r.status === 400 && r.body.ok === false && r.body.error === "invalid_run_id" && f.calls.length === 0,
+    );
+  }
+  {
+    const f = makeFakeApproveAll({ ok: true, approved: 0 });
+    const r = await handleApproveAllPendingRequest(
+      OK_HEADERS,
+      { runId: "   " },
+      { userId: "u", approveAll: f.approveAll },
+    );
+    expect("31 approve-all whitespace runId -> 400", r.status === 400 && f.calls.length === 0);
+  }
+
+  // --- Result mapping ---
+  {
+    const f = makeFakeApproveAll({ ok: true, approved: 3 });
+    const r = await handleApproveAllPendingRequest(OK_HEADERS, APPROVE_ALL_BODY, { userId: "u", approveAll: f.approveAll });
+    expect(
+      "32 approve-all ok -> 200 with approved count",
+      r.status === 200 && r.body.ok === true && r.body.approved === 3,
+    );
+    expect("32 approve-all ok -> approveAll called once", f.calls.length === 1);
+  }
+  {
+    const f = makeFakeApproveAll({ ok: false, reason: "run_not_found" });
+    const r = await handleApproveAllPendingRequest(OK_HEADERS, APPROVE_ALL_BODY, { userId: "u", approveAll: f.approveAll });
+    expect("33 approve-all run_not_found -> 404", r.status === 404 && r.body.ok === false && r.body.error === "run_not_found");
+  }
+  {
+    const f = makeFakeApproveAll({ ok: false, reason: "store_failed" });
+    const r = await handleApproveAllPendingRequest(OK_HEADERS, APPROVE_ALL_BODY, { userId: "u", approveAll: f.approveAll });
+    expect("34 approve-all store_failed -> 500", r.status === 500 && r.body.ok === false && r.body.error === "store_failed");
+  }
+
+  // --- Security provenance: userId from deps only; runId trimmed ---
+  {
+    const f = makeFakeApproveAll({ ok: true, approved: 1 });
+    const r = await handleApproveAllPendingRequest(
+      OK_HEADERS,
+      { runId: " run_1 ", userId: "attacker" },
+      { userId: "session_user", approveAll: f.approveAll },
+    );
+    expect("35 approve-all ok despite rogue body userId", r.status === 200);
+    expect("35 approve-all got session userId, not body's", f.calls.length === 1 && f.calls[0].userId === "session_user");
+    expect("35 approve-all got trimmed runId", f.calls.length === 1 && f.calls[0].runId === "run_1");
   }
 
   console.log(`\nPASSED ${passed}/${passed + failed}`);

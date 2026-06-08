@@ -13,7 +13,7 @@
 //     does ownership + plan-membership + decision-value checks). All error strings here
 //     are fixed constants; no header, body value, id, or secret ever appears in a response.
 
-import type { DeleteInviteDecisionResult, StoreInviteDecisionResult } from "./invite-decisions";
+import type { ApproveAllPendingResult, DeleteInviteDecisionResult, StoreInviteDecisionResult } from "./invite-decisions";
 import { isSameOrigin, type SameOriginHeaders } from "./same-origin-guard";
 
 type StoreFn = (args: {
@@ -163,5 +163,71 @@ export async function handleClearInviteDecisionRequest(
       return { status: 404, body: { ok: false, error: "run_not_found" } };
     case "delete_failed":
       return { status: 500, body: { ok: false, error: "delete_failed" } };
+  }
+}
+
+type ApproveAllFn = (args: {
+  runId: string;
+  userId: string;
+}) => Promise<ApproveAllPendingResult>;
+
+export type ApproveAllRouteDeps = {
+  userId: string; // MUST originate from the server-validated session
+  approveAll: ApproveAllFn; // injected; real one is approveAllPendingInviteDecisions (server-only)
+};
+
+export type ApproveAllResponseBody =
+  | { ok: true; approved: number }
+  | { ok: false; error: string };
+
+export type ApproveAllRouteResult = {
+  status: number;
+  body: ApproveAllResponseBody;
+};
+
+// Pure orchestration for the bulk "approve all pending" endpoint — sibling to the other two
+// handlers, same invariants:
+//   • Same-origin guard (CSRF) via the shared isSameOrigin.
+//   • userId is taken ONLY from deps (the server-validated session), NEVER the body.
+//   • the batch write is delegated to an injected approveAll (real impl is server-only and
+//     computes the pending set from the owned run, then multi-row upserts).
+// The body carries ONLY runId — there is no client-supplied creator list to validate, by
+// design (the pending set is server-authoritative). All error strings are fixed constants.
+export async function handleApproveAllPendingRequest(
+  headers: InviteDecisionRequestHeaders,
+  rawBody: unknown,
+  deps: ApproveAllRouteDeps,
+): Promise<ApproveAllRouteResult> {
+  // 1. Same-origin guard (CSRF).
+  if (!isSameOrigin(headers)) {
+    return { status: 403, body: { ok: false, error: "forbidden" } };
+  }
+
+  // 2. Validate body shape — only runId is required.
+  if (typeof rawBody !== "object" || rawBody === null) {
+    return { status: 400, body: { ok: false, error: "invalid_request" } };
+  }
+  const raw = rawBody as Record<string, unknown>;
+
+  const runId = raw["runId"];
+  if (typeof runId !== "string" || runId.trim() === "") {
+    return { status: 400, body: { ok: false, error: "invalid_run_id" } };
+  }
+
+  // 3. Delegate. userId comes from deps (session), NOT the body.
+  const result = await deps.approveAll({
+    runId: runId.trim(),
+    userId: deps.userId,
+  });
+
+  // 4. Map the result to an HTTP-shaped response.
+  if (result.ok) {
+    return { status: 200, body: { ok: true, approved: result.approved } };
+  }
+  switch (result.reason) {
+    case "run_not_found":
+      return { status: 404, body: { ok: false, error: "run_not_found" } };
+    case "store_failed":
+      return { status: 500, body: { ok: false, error: "store_failed" } };
   }
 }
