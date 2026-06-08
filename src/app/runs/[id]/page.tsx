@@ -73,6 +73,10 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
     }
   }
 
+  const approvedCount = plan.invites.filter((i) => decisionMap.get(i.creatorOpenId) === "approved").length;
+  const rejectedCount = plan.invites.filter((i) => decisionMap.get(i.creatorOpenId) === "rejected").length;
+  const pendingCount = plan.invites.length - approvedCount - rejectedCount;
+
   // Hydrate each approved creator's most-recent persisted brief (newest-first from the audit
   // trail) so it renders on page load WITHOUT a fresh paid /api/briefs call.
   const briefsResult = await listBriefsForRun(run.id, user.id);
@@ -149,7 +153,20 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Ranked invite plan, highest composite first.</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">Ranked invite plan, highest composite first.</p>
+              <div className="flex items-center gap-1.5 text-xs font-medium">
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                  <span className="font-semibold tabular-nums">{approvedCount}</span> approved
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                  <span className="font-semibold tabular-nums">{pendingCount}</span> pending
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                  <span className="font-semibold tabular-nums">{rejectedCount}</span> rejected
+                </span>
+              </div>
+            </div>
             <ul className="flex flex-col gap-2">
               {plan.invites.map((invite, i) => (
                 <li
