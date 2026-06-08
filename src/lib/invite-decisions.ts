@@ -151,3 +151,45 @@ export async function listInviteDecisions(
     return { ok: false, reason: "query_failed" };
   }
 }
+
+export type DeleteInviteDecisionResult =
+  | { ok: true }
+  | { ok: false; reason: "run_not_found" | "delete_failed" };
+
+// Clear (delete) the operator's decision for one creator in one run's plan, returning that
+// creator to the implicit "pending" state. userId MUST come from the server-validated
+// session. Ownership is enforced by re-reading the run double-scoped (getDiscoveryRun)
+// before any delete — the write-side isolation boundary, identical to storeInviteDecision:
+// a run the caller does not own is indistinguishable from a missing run and nothing is
+// deleted (run_not_found). The delete itself is additionally triple-scoped
+// (run_id + creator_open_id + user_id) as defense-in-depth, so even a logic slip cannot
+// reach another tenant's row. Idempotent: clearing when no decision exists still succeeds —
+// the desired end state (no decision) holds either way. Never logs row contents; fails closed.
+export async function deleteInviteDecision(args: {
+  runId: string;
+  userId: string;
+  creatorOpenId: string;
+}): Promise<DeleteInviteDecisionResult> {
+  const { runId, userId, creatorOpenId } = args;
+
+  const run = await getDiscoveryRun(runId, userId);
+  if (!run.ok) {
+    return run.reason === "not_found"
+      ? { ok: false, reason: "run_not_found" }
+      : { ok: false, reason: "delete_failed" };
+  }
+
+  try {
+    const supabase = getSupabaseServerClient();
+    const { error } = await supabase
+      .from("invite_decisions")
+      .delete()
+      .eq("run_id", runId)
+      .eq("creator_open_id", creatorOpenId)
+      .eq("user_id", userId);
+    if (error) return { ok: false, reason: "delete_failed" };
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "delete_failed" };
+  }
+}
