@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Decision = "approved" | "rejected";
 
@@ -18,6 +19,7 @@ export default function InviteDecisionControls({
   creatorOpenId: string;
   initialDecision: Decision | null;
 }) {
+  const router = useRouter();
   const [decision, setDecision] = useState<Decision | null>(initialDecision);
   const [loading, setLoading] = useState<Decision | null>(null);
   const [error, setError] = useState<boolean>(false);
@@ -38,6 +40,7 @@ export default function InviteDecisionControls({
         return;
       }
       setDecision(next);
+      router.refresh();
     } catch {
       setError(true);
     } finally {
