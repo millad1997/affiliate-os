@@ -8,6 +8,7 @@ import { listBriefsForRun, type StoredBrief } from "@/lib/briefs";
 import LogoutButton from "@/components/LogoutButton";
 import InviteDecisionControls from "@/components/InviteDecisionControls";
 import GenerateBriefControl from "@/components/GenerateBriefControl";
+import BulkApproveControl from "@/components/BulkApproveControl";
 
 export const dynamic = "force-dynamic";
 
@@ -155,16 +156,19 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-zinc-500 dark:text-zinc-400">Ranked invite plan, highest composite first.</p>
-              <div className="flex items-center gap-1.5 text-xs font-medium">
-                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                  <span className="font-semibold tabular-nums">{approvedCount}</span> approved
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                  <span className="font-semibold tabular-nums">{pendingCount}</span> pending
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-red-700 dark:bg-red-950/40 dark:text-red-400">
-                  <span className="font-semibold tabular-nums">{rejectedCount}</span> rejected
-                </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                    <span className="font-semibold tabular-nums">{approvedCount}</span> approved
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                    <span className="font-semibold tabular-nums">{pendingCount}</span> pending
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                    <span className="font-semibold tabular-nums">{rejectedCount}</span> rejected
+                  </span>
+                </div>
+                <BulkApproveControl runId={run.id} pendingCount={pendingCount} />
               </div>
             </div>
             <ul className="flex flex-col gap-2">
@@ -189,6 +193,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                   </div>
                   <div className="flex items-center justify-end gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
                     <InviteDecisionControls
+                      key={`${invite.creatorOpenId}:${decisionMap.get(invite.creatorOpenId) ?? "pending"}`}
                       runId={run.id}
                       creatorOpenId={invite.creatorOpenId}
                       initialDecision={decisionMap.get(invite.creatorOpenId) ?? null}
