@@ -3,10 +3,14 @@
 // (If this ever demands --conditions=react-server, a server-only value-import leaked in.)
 
 import {
+  handleClearInviteDecisionRequest,
   handleInviteDecisionRequest,
   type InviteDecisionRequestHeaders,
 } from "./invite-decision-route-core";
-import type { StoreInviteDecisionResult } from "./invite-decisions";
+import type {
+  DeleteInviteDecisionResult,
+  StoreInviteDecisionResult,
+} from "./invite-decisions";
 
 let passed = 0;
 let failed = 0;
@@ -41,6 +45,17 @@ const OK_HEADERS: InviteDecisionRequestHeaders = {
   secFetchSite: "same-origin",
 };
 const OK_BODY = { runId: "run_1", creatorOpenId: "creator_1", decision: "approved" };
+const CLEAR_BODY = { runId: "run_1", creatorOpenId: "creator_1" };
+
+type ClearArgs = { runId: string; userId: string; creatorOpenId: string };
+function makeFakeClear(result: DeleteInviteDecisionResult) {
+  const calls: ClearArgs[] = [];
+  const clear = async (args: ClearArgs): Promise<DeleteInviteDecisionResult> => {
+    calls.push(args);
+    return result;
+  };
+  return { clear, calls };
+}
 
 async function main(): Promise<void> {
   // --- CSRF guard ---
@@ -203,6 +218,98 @@ async function main(): Promise<void> {
     expect("18 store got session userId, not body's", f.calls.length === 1 && f.calls[0].userId === "session_user");
     expect("18 store got trimmed runId", f.calls.length === 1 && f.calls[0].runId === "run_1");
     expect("18 store got trimmed creatorOpenId", f.calls.length === 1 && f.calls[0].creatorOpenId === "creator_1");
+  }
+
+  // ============ handleClearInviteDecisionRequest (DELETE / clear) ============
+
+  // --- CSRF guard ---
+  {
+    const f = makeFakeClear({ ok: true });
+    const r = await handleClearInviteDecisionRequest(
+      { origin: "https://evil.com", host: "app.example.com", secFetchSite: "cross-site" },
+      CLEAR_BODY,
+      { userId: "u", clear: f.clear },
+    );
+    expect(
+      "19 clear cross-site -> 403 forbidden",
+      r.status === 403 && r.body.ok === false && r.body.error === "forbidden",
+    );
+    expect("19 clear cross-site -> clear NOT called", f.calls.length === 0);
+  }
+
+  // --- Body validation ---
+  {
+    const f = makeFakeClear({ ok: true });
+    const r = await handleClearInviteDecisionRequest(OK_HEADERS, null, { userId: "u", clear: f.clear });
+    expect(
+      "20 clear null body -> 400 invalid_request",
+      r.status === 400 && r.body.ok === false && r.body.error === "invalid_request" && f.calls.length === 0,
+    );
+  }
+  {
+    const f = makeFakeClear({ ok: true });
+    const r = await handleClearInviteDecisionRequest(
+      OK_HEADERS,
+      { creatorOpenId: "c" },
+      { userId: "u", clear: f.clear },
+    );
+    expect(
+      "21 clear missing runId -> 400 invalid_run_id",
+      r.status === 400 && r.body.ok === false && r.body.error === "invalid_run_id" && f.calls.length === 0,
+    );
+  }
+  {
+    const f = makeFakeClear({ ok: true });
+    const r = await handleClearInviteDecisionRequest(
+      OK_HEADERS,
+      { runId: "   ", creatorOpenId: "c" },
+      { userId: "u", clear: f.clear },
+    );
+    expect("22 clear whitespace runId -> 400", r.status === 400 && f.calls.length === 0);
+  }
+  {
+    const f = makeFakeClear({ ok: true });
+    const r = await handleClearInviteDecisionRequest(
+      OK_HEADERS,
+      { runId: "r" },
+      { userId: "u", clear: f.clear },
+    );
+    expect(
+      "23 clear missing creatorOpenId -> 400 invalid_creator_open_id",
+      r.status === 400 && r.body.ok === false && r.body.error === "invalid_creator_open_id" && f.calls.length === 0,
+    );
+  }
+
+  // --- Clear-result mapping ---
+  {
+    const f = makeFakeClear({ ok: true });
+    const r = await handleClearInviteDecisionRequest(OK_HEADERS, CLEAR_BODY, { userId: "u", clear: f.clear });
+    expect("24 clear ok -> 200 ok:true", r.status === 200 && r.body.ok === true);
+    expect("24 clear ok -> clear called once", f.calls.length === 1);
+  }
+  {
+    const f = makeFakeClear({ ok: false, reason: "run_not_found" });
+    const r = await handleClearInviteDecisionRequest(OK_HEADERS, CLEAR_BODY, { userId: "u", clear: f.clear });
+    expect("25 clear run_not_found -> 404", r.status === 404 && r.body.ok === false && r.body.error === "run_not_found");
+  }
+  {
+    const f = makeFakeClear({ ok: false, reason: "delete_failed" });
+    const r = await handleClearInviteDecisionRequest(OK_HEADERS, CLEAR_BODY, { userId: "u", clear: f.clear });
+    expect("26 clear delete_failed -> 500", r.status === 500 && r.body.ok === false && r.body.error === "delete_failed");
+  }
+
+  // --- Security provenance: userId from deps only; runId/creatorOpenId trimmed ---
+  {
+    const f = makeFakeClear({ ok: true });
+    const r = await handleClearInviteDecisionRequest(
+      OK_HEADERS,
+      { runId: " run_1 ", creatorOpenId: " creator_1 ", userId: "attacker" },
+      { userId: "session_user", clear: f.clear },
+    );
+    expect("27 clear ok despite rogue body userId", r.status === 200);
+    expect("27 clear got session userId, not body's", f.calls.length === 1 && f.calls[0].userId === "session_user");
+    expect("27 clear got trimmed runId", f.calls.length === 1 && f.calls[0].runId === "run_1");
+    expect("27 clear got trimmed creatorOpenId", f.calls.length === 1 && f.calls[0].creatorOpenId === "creator_1");
   }
 
   console.log(`\nPASSED ${passed}/${passed + failed}`);

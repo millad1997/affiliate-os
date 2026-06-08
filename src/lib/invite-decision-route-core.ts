@@ -13,7 +13,7 @@
 //     does ownership + plan-membership + decision-value checks). All error strings here
 //     are fixed constants; no header, body value, id, or secret ever appears in a response.
 
-import type { StoreInviteDecisionResult } from "./invite-decisions";
+import type { DeleteInviteDecisionResult, StoreInviteDecisionResult } from "./invite-decisions";
 import { isSameOrigin, type SameOriginHeaders } from "./same-origin-guard";
 
 type StoreFn = (args: {
@@ -91,5 +91,77 @@ export async function handleInviteDecisionRequest(
       return { status: 404, body: { ok: false, error: "run_not_found" } };
     case "store_failed":
       return { status: 500, body: { ok: false, error: "store_failed" } };
+  }
+}
+
+type ClearFn = (args: {
+  runId: string;
+  userId: string;
+  creatorOpenId: string;
+}) => Promise<DeleteInviteDecisionResult>;
+
+export type ClearInviteDecisionRouteDeps = {
+  userId: string; // MUST originate from the server-validated session
+  clear: ClearFn; // injected; real one is deleteInviteDecision (server-only)
+};
+
+export type ClearInviteDecisionResponseBody =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export type ClearInviteDecisionRouteResult = {
+  status: number;
+  body: ClearInviteDecisionResponseBody;
+};
+
+// Pure orchestration for the invite-decision CLEAR (DELETE) endpoint — sibling to
+// handleInviteDecisionRequest, same invariants:
+//   • Same-origin guard (CSRF) via the shared isSameOrigin.
+//   • userId is taken ONLY from deps (the server-validated session), NEVER the body.
+//   • the actual delete is delegated to an injected clear (real impl is server-only and
+//     does the run-ownership re-read + triple-scoped delete).
+// There is no decision field — clearing carries no value. All error strings are fixed
+// constants; no header, body value, id, or secret ever appears in a response.
+export async function handleClearInviteDecisionRequest(
+  headers: InviteDecisionRequestHeaders,
+  rawBody: unknown,
+  deps: ClearInviteDecisionRouteDeps,
+): Promise<ClearInviteDecisionRouteResult> {
+  // 1. Same-origin guard (CSRF).
+  if (!isSameOrigin(headers)) {
+    return { status: 403, body: { ok: false, error: "forbidden" } };
+  }
+
+  // 2. Validate body shape.
+  if (typeof rawBody !== "object" || rawBody === null) {
+    return { status: 400, body: { ok: false, error: "invalid_request" } };
+  }
+  const raw = rawBody as Record<string, unknown>;
+
+  const runId = raw["runId"];
+  if (typeof runId !== "string" || runId.trim() === "") {
+    return { status: 400, body: { ok: false, error: "invalid_run_id" } };
+  }
+  const creatorOpenId = raw["creatorOpenId"];
+  if (typeof creatorOpenId !== "string" || creatorOpenId.trim() === "") {
+    return { status: 400, body: { ok: false, error: "invalid_creator_open_id" } };
+  }
+
+  // 3. Delegate to the injected clear. userId comes from deps (session), NOT the body.
+  const result = await deps.clear({
+    runId: runId.trim(),
+    userId: deps.userId,
+    creatorOpenId: creatorOpenId.trim(),
+  });
+
+  // 4. Map the clear result to an HTTP-shaped response.
+  if (result.ok) {
+    return { status: 200, body: { ok: true } };
+  }
+  switch (result.reason) {
+    case "run_not_found":
+      return { status: 404, body: { ok: false, error: "run_not_found" } };
+    case "delete_failed":
+      return { status: 500, body: { ok: false, error: "delete_failed" } };
   }
 }
