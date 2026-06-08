@@ -6,7 +6,9 @@ import {
   handleApproveAllPendingRequest,
   handleClearInviteDecisionRequest,
   handleInviteDecisionRequest,
+  handleRejectAllPendingRequest,
   type InviteDecisionRequestHeaders,
+  type RejectAllPendingResult,
 } from "./invite-decision-route-core";
 import type {
   ApproveAllPendingResult,
@@ -69,6 +71,18 @@ function makeFakeApproveAll(result: ApproveAllPendingResult) {
     return result;
   };
   return { approveAll, calls };
+}
+
+const REJECT_ALL_BODY = { runId: "run_1" };
+
+type RejectAllArgs = { runId: string; userId: string };
+function makeFakeRejectAll(result: RejectAllPendingResult) {
+  const calls: RejectAllArgs[] = [];
+  const rejectAll = async (args: RejectAllArgs): Promise<RejectAllPendingResult> => {
+    calls.push(args);
+    return result;
+  };
+  return { rejectAll, calls };
 }
 
 async function main(): Promise<void> {
@@ -402,6 +416,84 @@ async function main(): Promise<void> {
     expect("35 approve-all ok despite rogue body userId", r.status === 200);
     expect("35 approve-all got session userId, not body's", f.calls.length === 1 && f.calls[0].userId === "session_user");
     expect("35 approve-all got trimmed runId", f.calls.length === 1 && f.calls[0].runId === "run_1");
+  }
+
+  // ============ handleRejectAllPendingRequest (bulk reject) ============
+
+  // --- CSRF guard ---
+  {
+    const f = makeFakeRejectAll({ ok: true, rejected: 0 });
+    const r = await handleRejectAllPendingRequest(
+      { origin: "https://evil.com", host: "app.example.com", secFetchSite: "cross-site" },
+      REJECT_ALL_BODY,
+      { userId: "u", rejectAll: f.rejectAll },
+    );
+    expect(
+      "36 reject-all cross-site -> 403 forbidden",
+      r.status === 403 && r.body.ok === false && r.body.error === "forbidden",
+    );
+    expect("36 reject-all cross-site -> rejectAll NOT called", f.calls.length === 0);
+  }
+
+  // --- Body validation ---
+  {
+    const f = makeFakeRejectAll({ ok: true, rejected: 0 });
+    const r = await handleRejectAllPendingRequest(OK_HEADERS, null, { userId: "u", rejectAll: f.rejectAll });
+    expect(
+      "37 reject-all null body -> 400 invalid_request",
+      r.status === 400 && r.body.ok === false && r.body.error === "invalid_request" && f.calls.length === 0,
+    );
+  }
+  {
+    const f = makeFakeRejectAll({ ok: true, rejected: 0 });
+    const r = await handleRejectAllPendingRequest(OK_HEADERS, {}, { userId: "u", rejectAll: f.rejectAll });
+    expect(
+      "38 reject-all missing runId -> 400 invalid_run_id",
+      r.status === 400 && r.body.ok === false && r.body.error === "invalid_run_id" && f.calls.length === 0,
+    );
+  }
+  {
+    const f = makeFakeRejectAll({ ok: true, rejected: 0 });
+    const r = await handleRejectAllPendingRequest(
+      OK_HEADERS,
+      { runId: "   " },
+      { userId: "u", rejectAll: f.rejectAll },
+    );
+    expect("39 reject-all whitespace runId -> 400", r.status === 400 && f.calls.length === 0);
+  }
+
+  // --- Result mapping ---
+  {
+    const f = makeFakeRejectAll({ ok: true, rejected: 3 });
+    const r = await handleRejectAllPendingRequest(OK_HEADERS, REJECT_ALL_BODY, { userId: "u", rejectAll: f.rejectAll });
+    expect(
+      "40 reject-all ok -> 200 with rejected count",
+      r.status === 200 && r.body.ok === true && r.body.rejected === 3,
+    );
+    expect("40 reject-all ok -> rejectAll called once", f.calls.length === 1);
+  }
+  {
+    const f = makeFakeRejectAll({ ok: false, reason: "run_not_found" });
+    const r = await handleRejectAllPendingRequest(OK_HEADERS, REJECT_ALL_BODY, { userId: "u", rejectAll: f.rejectAll });
+    expect("41 reject-all run_not_found -> 404", r.status === 404 && r.body.ok === false && r.body.error === "run_not_found");
+  }
+  {
+    const f = makeFakeRejectAll({ ok: false, reason: "store_failed" });
+    const r = await handleRejectAllPendingRequest(OK_HEADERS, REJECT_ALL_BODY, { userId: "u", rejectAll: f.rejectAll });
+    expect("42 reject-all store_failed -> 500", r.status === 500 && r.body.ok === false && r.body.error === "store_failed");
+  }
+
+  // --- Security provenance: userId from deps only; runId trimmed ---
+  {
+    const f = makeFakeRejectAll({ ok: true, rejected: 1 });
+    const r = await handleRejectAllPendingRequest(
+      OK_HEADERS,
+      { runId: " run_1 ", userId: "attacker" },
+      { userId: "session_user", rejectAll: f.rejectAll },
+    );
+    expect("43 reject-all ok despite rogue body userId", r.status === 200);
+    expect("43 reject-all got session userId, not body's", f.calls.length === 1 && f.calls[0].userId === "session_user");
+    expect("43 reject-all got trimmed runId", f.calls.length === 1 && f.calls[0].runId === "run_1");
   }
 
   console.log(`\nPASSED ${passed}/${passed + failed}`);

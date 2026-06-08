@@ -231,3 +231,78 @@ export async function handleApproveAllPendingRequest(
       return { status: 500, body: { ok: false, error: "store_failed" } };
   }
 }
+
+type RejectAllFn = (args: {
+  runId: string;
+  userId: string;
+}) => Promise<RejectAllPendingResult>;
+
+// Result contract for the bulk "reject all pending" server operation. Mirrors the
+// approve-all shape (count + closed reasons). Defined here as the dependency contract this
+// pure handler needs; the server impl (built later) must return a structurally-matching
+// value. May be relocated to invite-decisions.ts for symmetry with ApproveAllPendingResult
+// when that function lands.
+export type RejectAllPendingResult =
+  | { ok: true; rejected: number }
+  | { ok: false; reason: "run_not_found" | "store_failed" };
+
+export type RejectAllRouteDeps = {
+  userId: string; // MUST originate from the server-validated session
+  rejectAll: RejectAllFn; // injected; real impl will be rejectAllPendingInviteDecisions (server-only)
+};
+
+export type RejectAllResponseBody =
+  | { ok: true; rejected: number }
+  | { ok: false; error: string };
+
+export type RejectAllRouteResult = {
+  status: number;
+  body: RejectAllResponseBody;
+};
+
+// Pure orchestration for the bulk "reject all pending" endpoint — sibling to
+// handleApproveAllPendingRequest, same invariants:
+//   • Same-origin guard (CSRF) via the shared isSameOrigin.
+//   • userId is taken ONLY from deps (the server-validated session), NEVER the body.
+//   • the batch write is delegated to an injected rejectAll (real impl is server-only and
+//     computes the pending set from the owned run, then multi-row upserts as rejected).
+// The body carries ONLY runId — the pending set is server-authoritative, no client list.
+// All error strings are fixed constants.
+export async function handleRejectAllPendingRequest(
+  headers: InviteDecisionRequestHeaders,
+  rawBody: unknown,
+  deps: RejectAllRouteDeps,
+): Promise<RejectAllRouteResult> {
+  // 1. Same-origin guard (CSRF).
+  if (!isSameOrigin(headers)) {
+    return { status: 403, body: { ok: false, error: "forbidden" } };
+  }
+
+  // 2. Validate body shape — only runId is required.
+  if (typeof rawBody !== "object" || rawBody === null) {
+    return { status: 400, body: { ok: false, error: "invalid_request" } };
+  }
+  const raw = rawBody as Record<string, unknown>;
+
+  const runId = raw["runId"];
+  if (typeof runId !== "string" || runId.trim() === "") {
+    return { status: 400, body: { ok: false, error: "invalid_run_id" } };
+  }
+
+  // 3. Delegate. userId comes from deps (session), NOT the body.
+  const result = await deps.rejectAll({
+    runId: runId.trim(),
+    userId: deps.userId,
+  });
+
+  // 4. Map the result to an HTTP-shaped response.
+  if (result.ok) {
+    return { status: 200, body: { ok: true, rejected: result.rejected } };
+  }
+  switch (result.reason) {
+    case "run_not_found":
+      return { status: 404, body: { ok: false, error: "run_not_found" } };
+    case "store_failed":
+      return { status: 500, body: { ok: false, error: "store_failed" } };
+  }
+}
