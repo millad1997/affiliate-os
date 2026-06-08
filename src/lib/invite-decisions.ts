@@ -193,3 +193,62 @@ export async function deleteInviteDecision(args: {
     return { ok: false, reason: "delete_failed" };
   }
 }
+
+export type ApproveAllPendingResult =
+  | { ok: true; approved: number }
+  | { ok: false; reason: "run_not_found" | "store_failed" };
+
+// Approve every currently-PENDING creator in one run's plan in a single batch. "Pending"
+// means an in-plan creator with no existing decision row; already approved/rejected creators
+// are left untouched. userId MUST come from the server-validated session. Ownership is
+// enforced by re-reading the run double-scoped (getDiscoveryRun) before any write — the same
+// write-side isolation boundary as storeInviteDecision (non-owned run -> run_not_found,
+// nothing written). The set of pending creators is computed SERVER-SIDE from the owned run's
+// plan minus the existing decisions (never trusted from the client), then written as a single
+// multi-row upsert, every row carrying the session userId. Idempotent: with nothing pending it
+// approves 0. Never logs row contents; fails closed.
+export async function approveAllPendingInviteDecisions(args: {
+  runId: string;
+  userId: string;
+}): Promise<ApproveAllPendingResult> {
+  const { runId, userId } = args;
+
+  const run = await getDiscoveryRun(runId, userId);
+  if (!run.ok) {
+    return run.reason === "not_found"
+      ? { ok: false, reason: "run_not_found" }
+      : { ok: false, reason: "store_failed" };
+  }
+
+  const existing = await listInviteDecisions(runId, userId);
+  if (!existing.ok) {
+    return { ok: false, reason: "store_failed" };
+  }
+  const decided = new Set(existing.decisions.map((d) => d.creatorOpenId));
+  const pending = run.run.plan.invites
+    .map((i) => i.creatorOpenId)
+    .filter((creatorOpenId) => !decided.has(creatorOpenId));
+
+  if (pending.length === 0) {
+    return { ok: true, approved: 0 };
+  }
+
+  try {
+    const supabase = getSupabaseServerClient();
+    const now = new Date().toISOString();
+    const rows = pending.map((creatorOpenId) => ({
+      user_id: userId,
+      run_id: runId,
+      creator_open_id: creatorOpenId,
+      decision: "approved",
+      updated_at: now,
+    }));
+    const { error } = await supabase
+      .from("invite_decisions")
+      .upsert(rows, { onConflict: "run_id,creator_open_id" });
+    if (error) return { ok: false, reason: "store_failed" };
+    return { ok: true, approved: pending.length };
+  } catch {
+    return { ok: false, reason: "store_failed" };
+  }
+}
