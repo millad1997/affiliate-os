@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Live DB control scripts — never committed (distinct from committed *.check.ts vectors)
+*.control.ts
