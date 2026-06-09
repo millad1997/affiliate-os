@@ -10,6 +10,7 @@ import InviteDecisionControls from "@/components/InviteDecisionControls";
 import GenerateBriefControl from "@/components/GenerateBriefControl";
 import BulkApproveControl from "@/components/BulkApproveControl";
 import BulkRejectControl from "@/components/BulkRejectControl";
+import QueueFilter from "@/components/QueueFilter";
 
 export const dynamic = "force-dynamic";
 
@@ -155,65 +156,60 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Ranked invite plan, highest composite first.</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5 text-xs font-medium">
-                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                    <span className="font-semibold tabular-nums">{approvedCount}</span> approved
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                    <span className="font-semibold tabular-nums">{pendingCount}</span> pending
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-red-700 dark:bg-red-950/40 dark:text-red-400">
-                    <span className="font-semibold tabular-nums">{rejectedCount}</span> rejected
-                  </span>
-                </div>
-                <BulkApproveControl runId={run.id} pendingCount={pendingCount} />
-                <BulkRejectControl runId={run.id} pendingCount={pendingCount} />
-              </div>
-            </div>
-            <ul className="flex flex-col gap-2">
-              {plan.invites.map((invite, i) => (
-                <li
-                  key={invite.creatorOpenId}
-                  className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900"
-                >
-                  <div className="flex items-center gap-4">
-                    <span className="w-6 shrink-0 text-sm font-semibold tabular-nums text-zinc-400 dark:text-zinc-500">{i + 1}</span>
-                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-lg font-bold tabular-nums ${scoreBg(invite.composite)} ${scoreColor(invite.composite)}`}>
-                      {invite.composite}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">{invite.creatorOpenId}</p>
-                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{`Commission ${invite.commissionRate}%`}</p>
+            <QueueFilter
+              approvedCount={approvedCount}
+              pendingCount={pendingCount}
+              rejectedCount={rejectedCount}
+              bulkControls={
+                <>
+                  <BulkApproveControl runId={run.id} pendingCount={pendingCount} />
+                  <BulkRejectControl runId={run.id} pendingCount={pendingCount} />
+                </>
+              }
+            >
+              <ul className="flex flex-col gap-2">
+                {plan.invites.map((invite, i) => (
+                  <li
+                    key={invite.creatorOpenId}
+                    data-decision={decisionMap.get(invite.creatorOpenId) ?? "pending"}
+                    className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900"
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="w-6 shrink-0 text-sm font-semibold tabular-nums text-zinc-400 dark:text-zinc-500">{i + 1}</span>
+                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-lg font-bold tabular-nums ${scoreBg(invite.composite)} ${scoreColor(invite.composite)}`}>
+                        {invite.composite}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">{invite.creatorOpenId}</p>
+                        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{`Commission ${invite.commissionRate}%`}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{formatGmv(invite.effectiveGmv)}</p>
+                        <p className="text-xs text-zinc-400 dark:text-zinc-500">Effective GMV</p>
+                      </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{formatGmv(invite.effectiveGmv)}</p>
-                      <p className="text-xs text-zinc-400 dark:text-zinc-500">Effective GMV</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                    <InviteDecisionControls
-                      key={`${invite.creatorOpenId}:${decisionMap.get(invite.creatorOpenId) ?? "pending"}`}
-                      runId={run.id}
-                      creatorOpenId={invite.creatorOpenId}
-                      initialDecision={decisionMap.get(invite.creatorOpenId) ?? null}
-                    />
-                  </div>
-                  {decisionMap.get(invite.creatorOpenId) === "approved" && (
-                    <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                      <GenerateBriefControl
+                    <div className="flex items-center justify-end gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                      <InviteDecisionControls
+                        key={`${invite.creatorOpenId}:${decisionMap.get(invite.creatorOpenId) ?? "pending"}`}
                         runId={run.id}
                         creatorOpenId={invite.creatorOpenId}
-                        initialBrief={latestBriefByCreator.get(invite.creatorOpenId)?.brief ?? null}
-                        initialScan={latestBriefByCreator.get(invite.creatorOpenId)?.scan ?? null}
+                        initialDecision={decisionMap.get(invite.creatorOpenId) ?? null}
                       />
                     </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    {decisionMap.get(invite.creatorOpenId) === "approved" && (
+                      <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                        <GenerateBriefControl
+                          runId={run.id}
+                          creatorOpenId={invite.creatorOpenId}
+                          initialBrief={latestBriefByCreator.get(invite.creatorOpenId)?.brief ?? null}
+                          initialScan={latestBriefByCreator.get(invite.creatorOpenId)?.scan ?? null}
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </QueueFilter>
           </div>
         )}
       </main>
