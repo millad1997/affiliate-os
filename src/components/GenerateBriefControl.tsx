@@ -53,6 +53,30 @@ function humanizeCategory(cat: string): string {
   return cat.replace(/_/g, " ");
 }
 
+// Render a brief as clean plain text for the clipboard — the artifact an operator hands to a
+// creator. Faithful to the brief object: hook, talking points, approved claims used, CTA,
+// disclosure, and notes when present. Compliance findings are internal and deliberately omitted.
+function briefToPlainText(brief: ContentBrief): string {
+  const lines: string[] = [];
+  lines.push("Hook", brief.hook, "");
+  lines.push("Talking points");
+  for (const point of brief.talkingPoints) lines.push(`- ${point}`);
+  lines.push("");
+  lines.push("Approved claims used");
+  if (brief.approvedClaimsUsed.length === 0) {
+    lines.push("None referenced");
+  } else {
+    for (const claim of brief.approvedClaimsUsed) lines.push(`- ${claim}`);
+  }
+  lines.push("");
+  lines.push("Call to action", brief.callToAction, "");
+  lines.push("Disclosure", brief.disclosure);
+  if (brief.notes) {
+    lines.push("", "Notes", brief.notes);
+  }
+  return lines.join("\n");
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -78,6 +102,7 @@ export default function GenerateBriefControl({
   const [brief, setBrief] = useState<ContentBrief | null>(initialBrief);
   const [scan, setScan] = useState<ComplianceScan | null>(initialScan);
   const [timings, setTimings] = useState<BriefTimings | null>(null);
+  const [copied, setCopied] = useState<boolean>(false);
 
   async function generate(): Promise<void> {
     if (loading) return;
@@ -104,11 +129,27 @@ export default function GenerateBriefControl({
     }
   }
 
+  async function copyBrief(): Promise<void> {
+    if (!brief) return;
+    try {
+      await navigator.clipboard.writeText(briefToPlainText(brief));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard unavailable or permission denied — leave the button label unchanged.
+    }
+  }
+
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex items-center justify-end gap-2">
         {error && (
           <span className="mr-1 text-xs font-medium text-red-600 dark:text-red-400">Couldn&apos;t generate brief</span>
+        )}
+        {brief && (
+          <button type="button" onClick={copyBrief} className={`${btn} ${inactiveBtn}`}>
+            {copied ? "Copied!" : "Copy brief"}
+          </button>
         )}
         <button type="button" onClick={generate} disabled={loading} className={`${btn} ${inactiveBtn}`}>
           {loading ? "Generating…" : brief ? "Regenerate brief" : "Generate brief"}
