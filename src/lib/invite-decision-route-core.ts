@@ -13,7 +13,7 @@
 //     does ownership + plan-membership + decision-value checks). All error strings here
 //     are fixed constants; no header, body value, id, or secret ever appears in a response.
 
-import type { ApproveAllPendingResult, DeleteInviteDecisionResult, StoreInviteDecisionResult } from "./invite-decisions";
+import type { ApproveAllPendingResult, DeleteInviteDecisionResult, RejectAllPendingResult, StoreInviteDecisionResult } from "./invite-decisions";
 import { isSameOrigin, type SameOriginHeaders } from "./same-origin-guard";
 
 type StoreFn = (args: {
@@ -236,15 +236,6 @@ type RejectAllFn = (args: {
   runId: string;
   userId: string;
 }) => Promise<RejectAllPendingResult>;
-
-// Result contract for the bulk "reject all pending" server operation. Mirrors the
-// approve-all shape (count + closed reasons). Defined here as the dependency contract this
-// pure handler needs; the server impl (built later) must return a structurally-matching
-// value. May be relocated to invite-decisions.ts for symmetry with ApproveAllPendingResult
-// when that function lands.
-export type RejectAllPendingResult =
-  | { ok: true; rejected: number }
-  | { ok: false; reason: "run_not_found" | "store_failed" };
 
 export type RejectAllRouteDeps = {
   userId: string; // MUST originate from the server-validated session

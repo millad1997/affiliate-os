@@ -8,11 +8,11 @@ import {
   handleInviteDecisionRequest,
   handleRejectAllPendingRequest,
   type InviteDecisionRequestHeaders,
-  type RejectAllPendingResult,
 } from "./invite-decision-route-core";
 import type {
   ApproveAllPendingResult,
   DeleteInviteDecisionResult,
+  RejectAllPendingResult,
   StoreInviteDecisionResult,
 } from "./invite-decisions";
 
