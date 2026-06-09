@@ -9,6 +9,7 @@ import LogoutButton from "@/components/LogoutButton";
 import InviteDecisionControls from "@/components/InviteDecisionControls";
 import GenerateBriefControl from "@/components/GenerateBriefControl";
 import BulkApproveControl from "@/components/BulkApproveControl";
+import BulkRejectControl from "@/components/BulkRejectControl";
 
 export const dynamic = "force-dynamic";
 
@@ -169,6 +170,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                   </span>
                 </div>
                 <BulkApproveControl runId={run.id} pendingCount={pendingCount} />
+                <BulkRejectControl runId={run.id} pendingCount={pendingCount} />
               </div>
             </div>
             <ul className="flex flex-col gap-2">
