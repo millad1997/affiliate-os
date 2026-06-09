@@ -22,8 +22,10 @@ type ComplianceFinding = {
 
 type ComplianceScan = { verdict: "pass" | "flagged"; findings: ComplianceFinding[] };
 
+type BriefTimings = { generateMs: number; scanMs: number; totalMs: number };
+
 type BriefResponse =
-  | { ok: true; brief: ContentBrief; scan: ComplianceScan | null }
+  | { ok: true; brief: ContentBrief; scan: ComplianceScan | null; timings?: BriefTimings }
   | { ok: false; error: string };
 
 const btn =
@@ -75,6 +77,7 @@ export default function GenerateBriefControl({
   const [error, setError] = useState<boolean>(false);
   const [brief, setBrief] = useState<ContentBrief | null>(initialBrief);
   const [scan, setScan] = useState<ComplianceScan | null>(initialScan);
+  const [timings, setTimings] = useState<BriefTimings | null>(null);
 
   async function generate(): Promise<void> {
     if (loading) return;
@@ -93,6 +96,7 @@ export default function GenerateBriefControl({
       }
       setBrief(data.brief);
       setScan(data.scan);
+      setTimings(data.timings ?? null);
     } catch {
       setError(true);
     } finally {
@@ -110,6 +114,12 @@ export default function GenerateBriefControl({
           {loading ? "Generating…" : brief ? "Regenerate brief" : "Generate brief"}
         </button>
       </div>
+
+      {timings && (
+        <p className="-mt-1 text-right text-[11px] text-zinc-400 dark:text-zinc-500">
+          Generated in {(timings.totalMs / 1000).toFixed(1)}s · brief {(timings.generateMs / 1000).toFixed(1)}s + scan {(timings.scanMs / 1000).toFixed(1)}s
+        </p>
+      )}
 
       {brief && (
         <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-800 dark:bg-zinc-950/40">

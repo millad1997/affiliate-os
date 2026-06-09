@@ -42,6 +42,13 @@ export async function POST(request: Request) {
 
   const generate = makeAnthropicGenerate();
 
+  // Latency instrumentation: time the two PAID phases (generate, then scan) by wrapping the
+  // injected calls. The finally blocks record wall-clock ms even if a call throws, so the
+  // numbers reflect real spend latency. The core is untouched; timings are merged into the
+  // success response below and are NOT persisted (a brief hydrated on load carries no timing).
+  let generateMs = 0;
+  let scanMs = 0;
+
   const result = await handleBriefRequest(
     {
       origin: request.headers.get("origin"),
@@ -54,12 +61,32 @@ export async function POST(request: Request) {
       getRun: getDiscoveryRun,
       getDecisions: listInviteDecisions,
       getBrandContent,
-      buildBrief: (brand) => buildContentBrief(brand, generate),
-      scanBrief: (brand, brief) => scanBriefCompliance(brand, brief, generate),
+      buildBrief: async (brand) => {
+        const t0 = performance.now();
+        try {
+          return await buildContentBrief(brand, generate);
+        } finally {
+          generateMs = Math.round(performance.now() - t0);
+        }
+      },
+      scanBrief: async (brand, brief) => {
+        const t0 = performance.now();
+        try {
+          return await scanBriefCompliance(brand, brief, generate);
+        } finally {
+          scanMs = Math.round(performance.now() - t0);
+        }
+      },
       persistBrief: ({ runId, creatorOpenId, brief, scan }) =>
         storeBrief({ runId, userId, creatorOpenId, brief, scan }).then(() => undefined),
     },
   );
 
+  if (result.body.ok) {
+    return NextResponse.json(
+      { ...result.body, timings: { generateMs, scanMs, totalMs: generateMs + scanMs } },
+      { status: result.status },
+    );
+  }
   return NextResponse.json(result.body, { status: result.status });
 }
