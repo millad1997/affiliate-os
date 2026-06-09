@@ -249,6 +249,206 @@ function BrandTextFieldEditor({
   );
 }
 
+const configInputClass =
+  "rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50";
+const configLabelClass =
+  "flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400";
+const gateCheckboxClass = "h-4 w-4 rounded border-zinc-300 accent-zinc-900 dark:accent-zinc-100";
+const gateLabelClass = "flex cursor-pointer items-center gap-2 text-sm font-normal text-zinc-800 dark:text-zinc-200";
+
+function BrandConfigEditor({ brand }: { brand: Brand }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(false);
+
+  const [targetCategoryIds, setTargetCategoryIds] = useState("");
+  const [targetRegions, setTargetRegions] = useState("");
+  const [minFollowers, setMinFollowers] = useState("");
+  const [gateRegion, setGateRegion] = useState(true);
+  const [gateFollowers, setGateFollowers] = useState(false);
+  const [gateCategory, setGateCategory] = useState(false);
+  const [maxInvites, setMaxInvites] = useState("50");
+  const [commissionRate, setCommissionRate] = useState("10");
+  const [minGmvFloor, setMinGmvFloor] = useState("");
+
+  function seedFromBrand(): void {
+    setTargetCategoryIds(brand.target_category_ids.join(", "));
+    setTargetRegions(brand.target_regions.join(", "));
+    setMinFollowers(brand.min_followers === null ? "" : String(brand.min_followers));
+    setGateRegion(brand.gate_region);
+    setGateFollowers(brand.gate_followers);
+    setGateCategory(brand.gate_category);
+    setMaxInvites(String(brand.max_invites));
+    setCommissionRate(String(brand.commission_rate));
+    setMinGmvFloor(brand.min_gmv_floor === null ? "" : String(brand.min_gmv_floor));
+  }
+
+  async function save(): Promise<void> {
+    if (saving) return;
+    setSaving(true);
+    setError(false);
+    try {
+      const res = await fetch("/api/brands/config", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          brandId: brand.id,
+          target_category_ids: targetCategoryIds,
+          target_regions: targetRegions,
+          min_followers: minFollowers,
+          gate_region: gateRegion,
+          gate_followers: gateFollowers,
+          gate_category: gateCategory,
+          max_invites: maxInvites,
+          commission_rate: commissionRate,
+          min_gmv_floor: minGmvFloor,
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean };
+      if (!res.ok || data.ok !== true) {
+        setError(true);
+        return;
+      }
+      setEditing(false);
+      router.refresh();
+    } catch {
+      setError(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex flex-col gap-5 border-t border-zinc-100 pt-5 dark:border-zinc-800">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            Discovery &amp; outreach config
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              seedFromBrand();
+              setError(false);
+              setEditing(true);
+            }}
+            className="text-xs font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            Edit
+          </button>
+        </div>
+        <DetailRow
+          label="Target categories"
+          value={brand.target_category_ids.length ? brand.target_category_ids.join(", ") : "None"}
+        />
+        <DetailRow
+          label="Target regions"
+          value={brand.target_regions.length ? brand.target_regions.join(", ") : "None"}
+        />
+        <DetailRow
+          label="Minimum followers"
+          value={brand.min_followers === null ? "Any" : brand.min_followers.toLocaleString()}
+        />
+        <DetailRow
+          label="Hard filters"
+          value={(() => {
+            const filters: string[] = [];
+            if (brand.gate_region) filters.push("Region");
+            if (brand.gate_followers) filters.push("Followers");
+            if (brand.gate_category) filters.push("Category");
+            return filters.length === 0 ? "None" : filters.join(", ");
+          })()}
+        />
+        <DetailRow label="Max invites" value={String(brand.max_invites)} />
+        <DetailRow label="Commission rate" value={`${brand.commission_rate}%`} />
+        <DetailRow
+          label="Minimum GMV floor"
+          value={brand.min_gmv_floor === null ? "None" : Number(brand.min_gmv_floor).toLocaleString()}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 border-t border-zinc-100 pt-5 dark:border-zinc-800">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+        Discovery &amp; outreach config
+      </p>
+
+      <label className={configLabelClass}>
+        Target categories
+        <input type="text" value={targetCategoryIds} onChange={(e) => setTargetCategoryIds(e.target.value)} disabled={saving} placeholder="60001, 60002" className={configInputClass} />
+      </label>
+
+      <label className={configLabelClass}>
+        Target regions
+        <input type="text" value={targetRegions} onChange={(e) => setTargetRegions(e.target.value)} disabled={saving} placeholder="US" className={configInputClass} />
+      </label>
+
+      <label className={configLabelClass}>
+        Minimum followers
+        <input type="number" min={0} step={1} value={minFollowers} onChange={(e) => setMinFollowers(e.target.value)} disabled={saving} placeholder="Any" className={configInputClass} />
+      </label>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Hard filters</legend>
+        <label className={gateLabelClass}>
+          <input type="checkbox" checked={gateRegion} onChange={(e) => setGateRegion(e.target.checked)} disabled={saving} className={gateCheckboxClass} />
+          Region
+        </label>
+        <label className={gateLabelClass}>
+          <input type="checkbox" checked={gateFollowers} onChange={(e) => setGateFollowers(e.target.checked)} disabled={saving} className={gateCheckboxClass} />
+          Followers
+        </label>
+        <label className={gateLabelClass}>
+          <input type="checkbox" checked={gateCategory} onChange={(e) => setGateCategory(e.target.checked)} disabled={saving} className={gateCheckboxClass} />
+          Category
+        </label>
+      </fieldset>
+
+      <label className={configLabelClass}>
+        Max invites
+        <input type="number" min={0} step={1} value={maxInvites} onChange={(e) => setMaxInvites(e.target.value)} disabled={saving} className={configInputClass} />
+      </label>
+
+      <label className={configLabelClass}>
+        Commission rate (flat %)
+        <input type="number" min={0} step="any" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} disabled={saving} className={configInputClass} />
+      </label>
+
+      <label className={configLabelClass}>
+        Minimum GMV floor
+        <input type="number" min={0} step="any" value={minGmvFloor} onChange={(e) => setMinGmvFloor(e.target.value)} disabled={saving} placeholder="No floor" className={configInputClass} />
+      </label>
+
+      {error && <span className="text-xs font-medium text-red-600 dark:text-red-400">Couldn&apos;t save config</span>}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          className="inline-flex h-8 items-center justify-center rounded-lg bg-zinc-900 px-3 text-xs font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+        >
+          {saving ? "Saving…" : "Save config"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(false);
+            setError(false);
+          }}
+          disabled={saving}
+          className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-300 px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BrandRow({ brand }: { brand: Brand }) {
   const [open, setOpen] = useState(false);
 
@@ -307,39 +507,7 @@ function BrandRow({ brand }: { brand: Brand }) {
           />
           <ApprovedClaimsEditor brandId={brand.id} initial={brand.approved_claims} />
 
-          <div className="flex flex-col gap-5 border-t border-zinc-100 pt-5 dark:border-zinc-800">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              Discovery &amp; outreach config
-            </p>
-            <DetailRow
-              label="Target categories"
-              value={brand.target_category_ids.length ? brand.target_category_ids.join(", ") : "None"}
-            />
-            <DetailRow
-              label="Target regions"
-              value={brand.target_regions.length ? brand.target_regions.join(", ") : "None"}
-            />
-            <DetailRow
-              label="Minimum followers"
-              value={brand.min_followers === null ? "Any" : brand.min_followers.toLocaleString()}
-            />
-            <DetailRow
-              label="Hard filters"
-              value={(() => {
-                const filters: string[] = [];
-                if (brand.gate_region) filters.push("Region");
-                if (brand.gate_followers) filters.push("Followers");
-                if (brand.gate_category) filters.push("Category");
-                return filters.length === 0 ? "None" : filters.join(", ");
-              })()}
-            />
-            <DetailRow label="Max invites" value={String(brand.max_invites)} />
-            <DetailRow label="Commission rate" value={`${brand.commission_rate}%`} />
-            <DetailRow
-              label="Minimum GMV floor"
-              value={brand.min_gmv_floor === null ? "None" : Number(brand.min_gmv_floor).toLocaleString()}
-            />
-          </div>
+          <BrandConfigEditor brand={brand} />
         </div>
       )}
     </li>
