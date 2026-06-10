@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { briefToPlainText } from "@/lib/brief-plain-text";
 
 type ContentBrief = {
   hook: string;
@@ -51,30 +52,6 @@ function fieldLabel(field: string, index: number | null): string {
 
 function humanizeCategory(cat: string): string {
   return cat.replace(/_/g, " ");
-}
-
-// Render a brief as clean plain text for the clipboard — the artifact an operator hands to a
-// creator. Faithful to the brief object: hook, talking points, approved claims used, CTA,
-// disclosure, and notes when present. Compliance findings are internal and deliberately omitted.
-function briefToPlainText(brief: ContentBrief): string {
-  const lines: string[] = [];
-  lines.push("Hook", brief.hook, "");
-  lines.push("Talking points");
-  for (const point of brief.talkingPoints) lines.push(`- ${point}`);
-  lines.push("");
-  lines.push("Approved claims used");
-  if (brief.approvedClaimsUsed.length === 0) {
-    lines.push("None referenced");
-  } else {
-    for (const claim of brief.approvedClaimsUsed) lines.push(`- ${claim}`);
-  }
-  lines.push("");
-  lines.push("Call to action", brief.callToAction, "");
-  lines.push("Disclosure", brief.disclosure);
-  if (brief.notes) {
-    lines.push("", "Notes", brief.notes);
-  }
-  return lines.join("\n");
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
