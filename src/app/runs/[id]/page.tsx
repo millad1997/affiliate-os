@@ -11,6 +11,7 @@ import GenerateBriefControl from "@/components/GenerateBriefControl";
 import BulkApproveControl from "@/components/BulkApproveControl";
 import BulkRejectControl from "@/components/BulkRejectControl";
 import QueueFilter from "@/components/QueueFilter";
+import SendOutreachControl from "@/components/SendOutreachControl";
 
 export const dynamic = "force-dynamic";
 
@@ -156,6 +157,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           </div>
         ) : (
           <div className="flex flex-col gap-2">
+            <SendOutreachControl runId={run.id} approvedCount={approvedCount} />
             <QueueFilter
               approvedCount={approvedCount}
               pendingCount={pendingCount}
