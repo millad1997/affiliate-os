@@ -16,6 +16,11 @@ export type ParsedBrandConfigFields = {
   max_invites: number;
   commission_rate: number;
   min_gmv_floor: number | null;
+  tiktok_product_ids: string[];
+  seller_contact_email: string | null;
+  has_free_sample: boolean;
+  is_sample_approval_exempt: boolean;
+  collaboration_duration_days: number;
 };
 
 export type ParseBrandConfigResult =
@@ -99,6 +104,43 @@ export function parseBrandConfigFields(body: Record<string, unknown>): ParseBran
     min_gmv_floor = n;
   }
 
+  const tiktok_product_ids = parseStringList(body.tiktok_product_ids);
+
+  let seller_contact_email: string | null;
+  const rawSellerContactEmail = body.seller_contact_email;
+  if (rawSellerContactEmail === undefined || rawSellerContactEmail === null || rawSellerContactEmail === "") {
+    seller_contact_email = null;
+  } else if (typeof rawSellerContactEmail !== "string") {
+    return { ok: false, error: "seller_contact_email must be a string" };
+  } else {
+    const trimmed = rawSellerContactEmail.trim();
+    if (trimmed === "") {
+      seller_contact_email = null;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return { ok: false, error: "seller_contact_email must be a valid email address" };
+    } else {
+      seller_contact_email = trimmed;
+    }
+  }
+
+  const rawHasFreeSample = body.has_free_sample;
+  const has_free_sample = typeof rawHasFreeSample === "boolean" ? rawHasFreeSample : false;
+
+  const rawIsSampleApprovalExempt = body.is_sample_approval_exempt;
+  const is_sample_approval_exempt = typeof rawIsSampleApprovalExempt === "boolean" ? rawIsSampleApprovalExempt : false;
+
+  let collaboration_duration_days: number;
+  const rawCollaborationDurationDays = body.collaboration_duration_days;
+  if (rawCollaborationDurationDays === undefined || rawCollaborationDurationDays === null || rawCollaborationDurationDays === "") {
+    collaboration_duration_days = 30;
+  } else {
+    const n = Number(rawCollaborationDurationDays);
+    if (!isFinite(n) || !Number.isInteger(n) || n < 1) {
+      return { ok: false, error: "collaboration_duration_days must be a positive integer" };
+    }
+    collaboration_duration_days = n;
+  }
+
   return {
     ok: true,
     fields: {
@@ -111,6 +153,11 @@ export function parseBrandConfigFields(body: Record<string, unknown>): ParseBran
       max_invites,
       commission_rate,
       min_gmv_floor,
+      tiktok_product_ids,
+      seller_contact_email,
+      has_free_sample,
+      is_sample_approval_exempt,
+      collaboration_duration_days,
     },
   };
 }

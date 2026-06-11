@@ -23,7 +23,7 @@ async function fetchBrands(userId: string): Promise<{ brands: Brand[]; error: st
     const supabase = getSupabaseServerClient();
     const { data, error } = await supabase
       .from("brands")
-      .select("id, name, category, description, commission_context, exclusion_list, approved_claims, created_at, target_category_ids, target_regions, min_followers, gate_region, gate_followers, gate_category, max_invites, commission_rate, min_gmv_floor")
+      .select("id, name, category, description, commission_context, exclusion_list, approved_claims, created_at, target_category_ids, target_regions, min_followers, gate_region, gate_followers, gate_category, max_invites, commission_rate, min_gmv_floor, tiktok_product_ids, seller_contact_email, has_free_sample, is_sample_approval_exempt, collaboration_duration_days")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 

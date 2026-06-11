@@ -134,6 +134,11 @@ async function main(): Promise<void> {
     expect("11 max_invites default 50", fields?.max_invites === 50);
     expect("11 commission_rate default 10", fields?.commission_rate === 10);
     expect("11 min_gmv_floor default null", fields?.min_gmv_floor === null);
+    expect("11 tiktok_product_ids default []", JSON.stringify(fields?.tiktok_product_ids) === "[]");
+    expect("11 seller_contact_email default null", fields?.seller_contact_email === null);
+    expect("11 has_free_sample default false", fields?.has_free_sample === false);
+    expect("11 is_sample_approval_exempt default false", fields?.is_sample_approval_exempt === false);
+    expect("11 collaboration_duration_days default 30", fields?.collaboration_duration_days === 30);
   }
 
   // --- Result mapping ---

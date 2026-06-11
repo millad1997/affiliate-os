@@ -22,6 +22,11 @@ export type Brand = {
   max_invites: number;
   commission_rate: number | string;
   min_gmv_floor: number | string | null;
+  tiktok_product_ids: string[];
+  seller_contact_email: string | null;
+  has_free_sample: boolean;
+  is_sample_approval_exempt: boolean;
+  collaboration_duration_days: number;
 };
 
 function relativeTime(iso: string): string {
@@ -271,6 +276,11 @@ function BrandConfigEditor({ brand }: { brand: Brand }) {
   const [maxInvites, setMaxInvites] = useState("50");
   const [commissionRate, setCommissionRate] = useState("10");
   const [minGmvFloor, setMinGmvFloor] = useState("");
+  const [tiktokProductIds, setTiktokProductIds] = useState("");
+  const [sellerContactEmail, setSellerContactEmail] = useState("");
+  const [hasFreeSample, setHasFreeSample] = useState(false);
+  const [isSampleApprovalExempt, setIsSampleApprovalExempt] = useState(false);
+  const [collaborationDurationDays, setCollaborationDurationDays] = useState("30");
 
   function seedFromBrand(): void {
     setTargetCategoryIds(brand.target_category_ids.join(", "));
@@ -282,6 +292,11 @@ function BrandConfigEditor({ brand }: { brand: Brand }) {
     setMaxInvites(String(brand.max_invites));
     setCommissionRate(String(brand.commission_rate));
     setMinGmvFloor(brand.min_gmv_floor === null ? "" : String(brand.min_gmv_floor));
+    setTiktokProductIds(brand.tiktok_product_ids.join(", "));
+    setSellerContactEmail(brand.seller_contact_email ?? "");
+    setHasFreeSample(brand.has_free_sample);
+    setIsSampleApprovalExempt(brand.is_sample_approval_exempt);
+    setCollaborationDurationDays(String(brand.collaboration_duration_days));
   }
 
   async function save(): Promise<void> {
@@ -303,6 +318,11 @@ function BrandConfigEditor({ brand }: { brand: Brand }) {
           max_invites: maxInvites,
           commission_rate: commissionRate,
           min_gmv_floor: minGmvFloor,
+          tiktok_product_ids: tiktokProductIds,
+          seller_contact_email: sellerContactEmail,
+          has_free_sample: hasFreeSample,
+          is_sample_approval_exempt: isSampleApprovalExempt,
+          collaboration_duration_days: collaborationDurationDays,
         }),
       });
       const data = (await res.json()) as { ok?: boolean };
@@ -366,6 +386,22 @@ function BrandConfigEditor({ brand }: { brand: Brand }) {
           label="Minimum GMV floor"
           value={brand.min_gmv_floor === null ? "None" : Number(brand.min_gmv_floor).toLocaleString()}
         />
+        <DetailRow
+          label="TikTok product IDs"
+          value={brand.tiktok_product_ids.length ? brand.tiktok_product_ids.join(", ") : "None"}
+        />
+        <DetailRow
+          label="Seller contact email"
+          value={brand.seller_contact_email ?? "Not set"}
+        />
+        <DetailRow
+          label="Free sample"
+          value={brand.has_free_sample ? (brand.is_sample_approval_exempt ? "Yes — approval exempt" : "Yes") : "No"}
+        />
+        <DetailRow
+          label="Collaboration duration"
+          value={`${brand.collaboration_duration_days} days`}
+        />
       </div>
     );
   }
@@ -420,6 +456,33 @@ function BrandConfigEditor({ brand }: { brand: Brand }) {
       <label className={configLabelClass}>
         Minimum GMV floor
         <input type="number" min={0} step="any" value={minGmvFloor} onChange={(e) => setMinGmvFloor(e.target.value)} disabled={saving} placeholder="No floor" className={configInputClass} />
+      </label>
+
+      <label className={configLabelClass}>
+        TikTok product IDs
+        <input type="text" value={tiktokProductIds} onChange={(e) => setTiktokProductIds(e.target.value)} disabled={saving} placeholder="1729000000000000001, 1729000000000000002" className={configInputClass} />
+      </label>
+
+      <label className={configLabelClass}>
+        Seller contact email
+        <input type="text" value={sellerContactEmail} onChange={(e) => setSellerContactEmail(e.target.value)} disabled={saving} placeholder="partnerships@yourbrand.com" className={configInputClass} />
+      </label>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Free sample</legend>
+        <label className={gateLabelClass}>
+          <input type="checkbox" checked={hasFreeSample} onChange={(e) => setHasFreeSample(e.target.checked)} disabled={saving} className={gateCheckboxClass} />
+          Offer free sample
+        </label>
+        <label className={gateLabelClass}>
+          <input type="checkbox" checked={isSampleApprovalExempt} onChange={(e) => setIsSampleApprovalExempt(e.target.checked)} disabled={saving} className={gateCheckboxClass} />
+          Sample approval exempt
+        </label>
+      </fieldset>
+
+      <label className={configLabelClass}>
+        Collaboration duration (days)
+        <input type="number" min={1} step={1} value={collaborationDurationDays} onChange={(e) => setCollaborationDurationDays(e.target.value)} disabled={saving} className={configInputClass} />
       </label>
 
       {error && <span className="text-xs font-medium text-red-600 dark:text-red-400">Couldn&apos;t save config</span>}

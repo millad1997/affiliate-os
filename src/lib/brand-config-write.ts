@@ -7,7 +7,7 @@ import "server-only";
 // rows -> brand_not_found, and nothing is written. userId MUST come from the server-validated
 // session, never client input. Receives ALREADY-VALIDATED fields (parseBrandConfigFields runs
 // in the pure route-core); this module performs NO parsing — it only writes. The column list is
-// enumerated explicitly (not spread) so this write can only ever touch these nine config
+// enumerated explicitly (not spread) so this write can only ever touch these fourteen config
 // columns. Mirrors brand-content-write.ts's discipline and brand-config-read.ts's column set.
 
 import { getSupabaseServerClient } from "./supabase-server";
@@ -38,6 +38,11 @@ export async function updateBrandConfig(args: {
         max_invites: fields.max_invites,
         commission_rate: fields.commission_rate,
         min_gmv_floor: fields.min_gmv_floor,
+        tiktok_product_ids: fields.tiktok_product_ids,
+        seller_contact_email: fields.seller_contact_email,
+        has_free_sample: fields.has_free_sample,
+        is_sample_approval_exempt: fields.is_sample_approval_exempt,
+        collaboration_duration_days: fields.collaboration_duration_days,
       })
       .eq("id", brandId)
       .eq("user_id", userId)
