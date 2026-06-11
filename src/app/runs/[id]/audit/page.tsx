@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/require-user";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getDiscoveryRun } from "@/lib/discovery-runs";
 import { listBriefsForRun, type StoredBrief, type BriefVerdict } from "@/lib/briefs";
+import { listSendsForRun, type StoredSend } from "@/lib/sends";
 import LogoutButton from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,16 @@ function verdictBadge(verdict: BriefVerdict): { label: string; classes: string }
   return { label: "Not scanned", classes: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" };
 }
 
+function sendStatusBadge(s: StoredSend): { label: string; classes: string } {
+  if (s.status === "sent") {
+    return { label: "Sent", classes: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" };
+  }
+  return {
+    label: s.errorCode ? `Failed · ${s.errorCode}` : "Failed",
+    classes: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400",
+  };
+}
+
 async function resolveBrandName(userId: string, brandId: string): Promise<string | null> {
   const supabase = getSupabaseServerClient();
   const { data } = await supabase
@@ -78,13 +89,18 @@ export default async function RunAuditPage({ params }: { params: Promise<{ id: s
   const briefsResult = await listBriefsForRun(run.id, user.id);
   const briefs: StoredBrief[] = briefsResult.ok ? briefsResult.briefs : [];
 
+  // Outreach send history: every attempt (sent AND failed), newest first, tenant-scoped.
+  // Soft-fails to empty: a read failure must never block rendering the brief trail.
+  const sendsResult = await listSendsForRun(run.id, user.id);
+  const sends: StoredSend[] = sendsResult.ok ? sendsResult.sends : [];
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <header className="border-b border-zinc-200 bg-white/80 px-6 py-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Affiliate Commerce OS</p>
-            <h1 className="text-lg font-semibold">Brief audit trail</h1>
+            <h1 className="text-lg font-semibold">Audit trail</h1>
           </div>
           <nav className="flex items-center gap-4">
             <Link href={`/runs/${run.id}`} className="text-sm font-medium text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100">
@@ -104,6 +120,40 @@ export default async function RunAuditPage({ params }: { params: Promise<{ id: s
               : `${briefs.length} brief${briefs.length === 1 ? "" : "s"} generated · newest first`}
           </p>
         </div>
+
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Outreach sends</h2>
+              <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+                {sends.length === 0
+                  ? "No outreach sent yet"
+                  : `${sends.length} attempt${sends.length === 1 ? "" : "s"} recorded · newest first`}
+              </p>
+            </div>
+            {sends.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {sends.map((s) => {
+                  const badge = sendStatusBadge(s);
+                  return (
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">{s.creatorOpenId}</p>
+                        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{relativeTime(s.createdAt)}</p>
+                      </div>
+                      <span className={`inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-semibold ${badge.classes}`}>
+                        {badge.label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <div className="border-t border-zinc-200 dark:border-zinc-800" />
 
         {briefs.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-zinc-300 px-8 py-12 text-center dark:border-zinc-700">

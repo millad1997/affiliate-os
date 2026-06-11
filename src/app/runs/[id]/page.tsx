@@ -5,6 +5,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getDiscoveryRun } from "@/lib/discovery-runs";
 import { listInviteDecisions } from "@/lib/invite-decisions";
 import { listBriefsForRun, type StoredBrief } from "@/lib/briefs";
+import { listSentCreatorOpenIds } from "@/lib/sends";
 import LogoutButton from "@/components/LogoutButton";
 import InviteDecisionControls from "@/components/InviteDecisionControls";
 import GenerateBriefControl from "@/components/GenerateBriefControl";
@@ -92,6 +93,12 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
       }
     }
   }
+
+  // Creators already successfully sent outreach in this run (status='sent' only). Server-rendered
+  // from the durable sends audit table, so sent state survives refresh/reload by construction.
+  // Soft-fails to an empty set: a read failure must never block rendering the plan.
+  const sentResult = await listSentCreatorOpenIds(run.id, user.id);
+  const sentCreators = new Set<string>(sentResult.ok ? sentResult.creatorOpenIds : []);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -182,7 +189,14 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                         {invite.composite}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">{invite.creatorOpenId}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">{invite.creatorOpenId}</p>
+                          {sentCreators.has(invite.creatorOpenId) && (
+                            <span className="inline-flex shrink-0 items-center rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                              Sent
+                            </span>
+                          )}
+                        </div>
                         <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{`Commission ${invite.commissionRate}%`}</p>
                       </div>
                       <div className="shrink-0 text-right">
