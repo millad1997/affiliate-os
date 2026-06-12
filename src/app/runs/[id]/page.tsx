@@ -6,6 +6,8 @@ import { getDiscoveryRun } from "@/lib/discovery-runs";
 import { listInviteDecisions } from "@/lib/invite-decisions";
 import { listBriefsForRun, type StoredBrief } from "@/lib/briefs";
 import { listSentCreatorOpenIds } from "@/lib/sends";
+import { getBrandOutreachConfig } from "@/lib/brand-outreach-config-read";
+import { assessOutreachReadiness, type OutreachMissingField } from "@/lib/outreach-readiness";
 import LogoutButton from "@/components/LogoutButton";
 import InviteDecisionControls from "@/components/InviteDecisionControls";
 import GenerateBriefControl from "@/components/GenerateBriefControl";
@@ -45,6 +47,11 @@ function formatGmv(v: number | null): string {
   if (v === null) return "—";
   return `$${v.toLocaleString()}`;
 }
+
+const MISSING_FIELD_LABELS: Record<OutreachMissingField, string> = {
+  tiktok_product_ids: "TikTok product IDs",
+  seller_contact_email: "Seller contact email",
+};
 
 async function resolveBrandName(userId: string, brandId: string): Promise<string | null> {
   const supabase = getSupabaseServerClient();
@@ -99,6 +106,15 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   // Soft-fails to an empty set: a read failure must never block rendering the plan.
   const sentResult = await listSentCreatorOpenIds(run.id, user.id);
   const sentCreators = new Set<string>(sentResult.ok ? sentResult.creatorOpenIds : []);
+
+  // Proactive outreach-config readiness for this run's brand, server-rendered so the operator
+  // sees an incomplete config BEFORE arming Send rather than only via the API's 409 preflight.
+  // Soft-fails to null on any read failure: this panel is an affordance, not a guard — the
+  // send route's preflight remains the enforcement point. Warn only on positive knowledge.
+  const outreachConfigResult = await getBrandOutreachConfig(run.brandId, user.id);
+  const outreachReadiness = outreachConfigResult.ok
+    ? assessOutreachReadiness(outreachConfigResult.config)
+    : null;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -164,6 +180,20 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           </div>
         ) : (
           <div className="flex flex-col gap-2">
+            {outreachReadiness !== null && !outreachReadiness.ready && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm dark:border-amber-900 dark:bg-amber-950/40">
+                <p className="font-medium text-amber-800 dark:text-amber-300">Outreach config incomplete</p>
+                <p className="mt-1 text-amber-700 dark:text-amber-400">
+                  {`Sends for this brand will be blocked until the following ${outreachReadiness.missing.length === 1 ? "field is" : "fields are"} filled in: ${outreachReadiness.missing.map((f) => MISSING_FIELD_LABELS[f]).join(", ")}.`}
+                </p>
+                <Link
+                  href="/brands"
+                  className="mt-2 inline-block text-sm font-medium text-amber-800 underline underline-offset-4 dark:text-amber-300"
+                >
+                  Edit brand config
+                </Link>
+              </div>
+            )}
             <SendOutreachControl runId={run.id} approvedCount={approvedCount} />
             <QueueFilter
               approvedCount={approvedCount}
