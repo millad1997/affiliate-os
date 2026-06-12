@@ -8,6 +8,8 @@
 //   • eligibility is buildSendPlan's alone (only approved, never twice per run) and the core
 //     enforces the strict compliance gate (latest brief verdict must be "pass") before any
 //     adapter call.
+//   • outreach-config preflight: incomplete brand outreach config refuses the whole request
+//     (409 outreach_config_incomplete) before any adapter or audit work.
 //   • the adapter behind the seam is the STUB (makeStubSendAdapter) until TikTok scope
 //     activation — no live outreach leaves this route yet. Swapping in the live signed
 //     adapter at activation changes ONLY the sendOutreach line below.
@@ -16,6 +18,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAuthServerClient } from "@/lib/supabase-auth-server";
 import { getDiscoveryRun } from "@/lib/discovery-runs";
+import { getBrandOutreachConfig } from "@/lib/brand-outreach-config-read";
 import { listInviteDecisions } from "@/lib/invite-decisions";
 import { getLatestBrief } from "@/lib/briefs";
 import { listSentCreatorOpenIds, storeSend } from "@/lib/sends";
@@ -50,6 +53,7 @@ export async function POST(request: Request) {
     {
       userId,
       getRun: getDiscoveryRun,
+      getOutreachConfig: getBrandOutreachConfig,
       getDecisions: listInviteDecisions,
       getSentCreatorOpenIds: listSentCreatorOpenIds,
       getLatestBrief,

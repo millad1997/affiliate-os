@@ -20,9 +20,11 @@ type SendCreatorStatus =
 
 type SendCreatorResult = { creatorOpenId: string; status: SendCreatorStatus };
 
+type OutreachMissingField = "tiktok_product_ids" | "seller_contact_email";
+
 type SendResponse =
   | { ok: true; results: SendCreatorResult[]; alreadySent: string[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; missing?: OutreachMissingField[] };
 
 const primaryBtn =
   "inline-flex h-7 items-center justify-center rounded-md bg-zinc-900 px-2.5 text-xs font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200";
@@ -58,11 +60,13 @@ export default function SendOutreachControl({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<boolean>(false);
   const [outcome, setOutcome] = useState<{ results: SendCreatorResult[]; alreadySent: string[] } | null>(null);
+  const [configMissing, setConfigMissing] = useState<OutreachMissingField[] | null>(null);
 
   async function send(): Promise<void> {
     if (loading) return;
     setLoading(true);
     setError(false);
+    setConfigMissing(null);
     try {
       const res = await fetch("/api/sends", {
         method: "POST",
@@ -71,6 +75,11 @@ export default function SendOutreachControl({
       });
       const data = (await res.json()) as SendResponse;
       if (!res.ok || data.ok !== true) {
+        if (data.ok === false && data.error === "outreach_config_incomplete" && Array.isArray(data.missing)) {
+          setConfigMissing(data.missing);
+          setArmed(false);
+          return;
+        }
         setError(true);
         return;
       }
@@ -115,6 +124,14 @@ export default function SendOutreachControl({
           </>
         )}
       </div>
+
+      {configMissing && (
+        <p className="text-right text-xs font-medium text-amber-700 dark:text-amber-400">
+          {`Outreach config incomplete — set ${configMissing
+            .map((f) => (f === "tiktok_product_ids" ? "TikTok product IDs" : "a seller contact email"))
+            .join(" and ")} on the brand's Discovery & outreach config.`}
+        </p>
+      )}
 
       {outcome && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-950/40">

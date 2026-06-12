@@ -3,6 +3,7 @@ import type { GetDiscoveryRunResult } from "./discovery-runs";
 import type { GetLatestBriefResult } from "./briefs";
 import type { StoreSendResult } from "./sends";
 import type { ContentBrief } from "./content-brief";
+import type { BrandOutreachConfig } from "./outreach-readiness";
 
 let failures = 0;
 function ok(name: string, cond: boolean): void {
@@ -16,6 +17,15 @@ const USER = "user-a";
 const RUN = "run-1";
 
 const FAKE_BRIEF = { hook: "h", talkingPoints: [], approvedClaimsUsed: [], cta: "c", disclosure: "d" } as unknown as ContentBrief;
+
+const READY_CONFIG: BrandOutreachConfig = {
+  tiktokProductIds: ["1729000000000000777"],
+  sellerContactEmail: "partners@brand.com",
+  hasFreeSample: false,
+  isSampleApprovalExempt: false,
+  collaborationDurationDays: 30,
+  commissionRatePercent: 10,
+};
 
 function fakeRun(creators: string[]): GetDiscoveryRunResult {
   return {
@@ -41,6 +51,7 @@ function makeDeps(overrides: Partial<SendRouteDeps>): SendRouteDeps {
   return {
     userId: USER,
     getRun: async () => fakeRun(["a", "b", "c"]),
+    getOutreachConfig: async () => ({ ok: true, config: READY_CONFIG }) as never,
     getDecisions: async () => ({
       ok: true,
       decisions: [
@@ -184,6 +195,34 @@ async function main(): Promise<void> {
   ok("lost_race_maps_to_sent", r13.status === 200 && r13.body.ok === true
     && statusOf(r13.body.results, "a") === "sent"
     && statusOf(r13.body.results, "b") === "sent");
+
+  // 14. Outreach-config read failure => 500 lookup_failed; nothing downstream runs.
+  const calls14: string[] = [];
+  const r14 = await handleSendRequest(GOOD_HEADERS, { runId: RUN }, makeDeps({
+    getOutreachConfig: async () => ({ ok: false, reason: "query_failed" }) as never,
+    getDecisions: async () => { calls14.push("decisions"); throw new Error("must not be called"); },
+    sendOutreach: async () => { calls14.push("send"); throw new Error("must not be called"); },
+    persistSend: async () => { calls14.push("persist"); throw new Error("must not be called"); },
+  }));
+  ok("config_lookup_500", r14.status === 500 && r14.body.ok === false && r14.body.error === "lookup_failed"
+    && calls14.length === 0);
+
+  // 15. Incomplete outreach config => 409 with the missing list; NOTHING downstream runs.
+  const calls15: string[] = [];
+  const r15 = await handleSendRequest(GOOD_HEADERS, { runId: RUN }, makeDeps({
+    getOutreachConfig: async () => ({
+      ok: true,
+      config: { ...READY_CONFIG, tiktokProductIds: [], sellerContactEmail: null },
+    }) as never,
+    getDecisions: async () => { calls15.push("decisions"); throw new Error("must not be called"); },
+    getSentCreatorOpenIds: async () => { calls15.push("sent"); throw new Error("must not be called"); },
+    sendOutreach: async () => { calls15.push("send"); throw new Error("must not be called"); },
+    persistSend: async () => { calls15.push("persist"); throw new Error("must not be called"); },
+  }));
+  ok("config_incomplete_409", r15.status === 409 && r15.body.ok === false
+    && r15.body.error === "outreach_config_incomplete"
+    && JSON.stringify(r15.body.missing) === JSON.stringify(["tiktok_product_ids", "seller_contact_email"])
+    && calls15.length === 0);
 }
 
 main().finally(() => {

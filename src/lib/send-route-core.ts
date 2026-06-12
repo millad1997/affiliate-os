@@ -6,6 +6,10 @@
 //   • Ownership: the run is re-read double-scoped; non-owned => run_not_found, nothing runs.
 //   • Eligibility is decided EXCLUSIVELY by buildSendPlan (only approved; never twice per
 //     run) — this core never constructs its own eligibility logic.
+//   • OUTREACH-CONFIG PREFLIGHT: the brand's outreach config (read via injected
+//     getOutreachConfig) must be attemptable — assessOutreachReadiness is the single source
+//     of truth. Incomplete config => 409 outreach_config_incomplete with the controlled-
+//     vocabulary missing list (operator-actionable, never secret); NOTHING else runs.
 //   • COMPLIANCE GATE (strict, by product decision): outreach only goes out for a creator
 //     whose LATEST stored brief has verdict "pass". No brief => skipped_no_brief; verdict
 //     "flagged" or "unavailable" => skipped_not_compliant. Skips are reported, never silent.
@@ -20,12 +24,14 @@
 //   • All error strings are fixed constants; no id, header, body value, brief content, or
 //     adapter message ever appears in a response. The composed message is passed only to the
 //     adapter, never echoed back.
-// All IO is injected; every cross-module import is `import type` (erased) EXCEPT isSameOrigin
-// and buildSendPlan, both pure — so this core stays pure (plain `npx tsx`).
+// All IO is injected; every cross-module import is `import type` (erased) EXCEPT isSameOrigin,
+// buildSendPlan, and assessOutreachReadiness, all pure — so this core stays pure (plain `npx tsx`).
 
 import { isSameOrigin, type SameOriginHeaders } from "./same-origin-guard";
 import { buildSendPlan } from "./outreach-send-plan";
+import { assessOutreachReadiness, type OutreachMissingField } from "./outreach-readiness";
 import type { GetDiscoveryRunResult } from "./discovery-runs";
+import type { GetBrandOutreachConfigResult } from "./brand-outreach-config-read";
 import type { ListInviteDecisionsResult } from "./invite-decisions";
 import type { GetLatestBriefResult } from "./briefs";
 import type { ListSentCreatorOpenIdsResult, StoreSendResult, SendStatus } from "./sends";
@@ -35,6 +41,8 @@ import type { OutreachSendAdapter } from "./outreach-send-adapter";
 export type SendRouteDeps = {
   userId: string; // MUST originate from the server-validated session
   getRun: (runId: string, userId: string) => Promise<GetDiscoveryRunResult>;
+  // Reads the run's brand outreach config (server-only impl; injected). Preflight only.
+  getOutreachConfig: (brandId: string, userId: string) => Promise<GetBrandOutreachConfigResult>;
   getDecisions: (runId: string, userId: string) => Promise<ListInviteDecisionsResult>;
   getSentCreatorOpenIds: (runId: string, userId: string) => Promise<ListSentCreatorOpenIdsResult>;
   getLatestBrief: (runId: string, creatorOpenId: string, userId: string) => Promise<GetLatestBriefResult>;
@@ -63,7 +71,7 @@ export type SendCreatorResult = { creatorOpenId: string; status: SendCreatorStat
 
 export type SendResponseBody =
   | { ok: true; results: SendCreatorResult[]; alreadySent: string[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; missing?: OutreachMissingField[] };
 
 export type SendRouteResult = {
   status: number;
@@ -99,6 +107,20 @@ export async function handleSendRequest(
       : { status: 500, body: { ok: false, error: "lookup_failed" } };
   }
   const run = runResult.run;
+
+  // 3.5 Outreach-config preflight: the brand must have the fields without which a send
+  //     cannot even be attempted. Runs before any other lookups — fix config first.
+  const configResult = await deps.getOutreachConfig(run.brandId, deps.userId);
+  if (!configResult.ok) {
+    return { status: 500, body: { ok: false, error: "lookup_failed" } };
+  }
+  const readiness = assessOutreachReadiness(configResult.config);
+  if (!readiness.ready) {
+    return {
+      status: 409,
+      body: { ok: false, error: "outreach_config_incomplete", missing: readiness.missing },
+    };
+  }
 
   // 4. Resolve decisions and the already-sent set; eligibility is buildSendPlan's alone.
   const decisionsResult = await deps.getDecisions(trimmedRunId, deps.userId);
