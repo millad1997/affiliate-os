@@ -2,7 +2,10 @@ import {
   buildSearchCreatorsRequest,
   buildAdvancedFiltersRequest,
   buildGetCreatorRequest,
+  buildTargetCollabSignedRequest,
 } from "./tiktok-marketplace-request";
+import { buildCreateTargetCollabRequest } from "./tiktok-target-collab";
+import { signRequest } from "./tiktok-sign";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -51,6 +54,62 @@ eq("T4 search+pageToken body default", r4.body, "{}");
 ok("T5 accessToken NOT in search url", !r1.url.includes(auth.accessToken));
 ok("T5 accessToken NOT in filter url", !r2.url.includes(auth.accessToken));
 ok("T5 accessToken NOT in creator url", !r3.url.includes(auth.accessToken));
+
+// T6: target-collab signed request — structural + sign-parity (the sign algorithm itself is
+// locked by tiktok-sign.check.ts; what matters here is that the bytes signed === bytes sent).
+const collabPath = "/affiliate_seller/202508/target_collaborations";
+const collabBody = {
+  name: "Vireo Health Co — ttopen_focus_fiona",
+  message: "Hi! We'd love to collaborate.",
+  end_time: "1701814400",
+  products: [{ id: "1729382476051234567", target_commission_rate: 1500 }],
+  creator_user_open_ids: ["ttopen_focus_fiona"],
+  seller_contact_info: { email: "partnerships@vireohealth.com" },
+  free_sample_rule: { has_free_sample: true, is_sample_approval_exempt: false },
+};
+const r5 = buildTargetCollabSignedRequest({ auth, timestamp: ts, path: collabPath, body: collabBody });
+const expectedBody5 = JSON.stringify(collabBody);
+const expectedSign5 = signRequest({
+  path: collabPath,
+  queryParams: { app_key: auth.appKey, timestamp: ts, shop_cipher: auth.shopCipher },
+  body: expectedBody5,
+  contentType: "application/json",
+  appSecret: auth.appSecret,
+});
+eq("T6 collab method", r5.method, "POST");
+eq("T6 collab url", r5.url, `https://open-api.tiktokglobalshop.com${collabPath}?app_key=test_app_key&timestamp=1700000000&shop_cipher=ROW_test_cipher&sign=${expectedSign5}`);
+eq("T6 collab body exact bytes", r5.body, expectedBody5);
+eq("T6 collab content-type", r5.headers["content-type"], "application/json");
+eq("T6 collab token header", r5.headers["x-tts-access-token"], "test_access_token");
+ok("T6 accessToken NOT in collab url", !r5.url.includes(auth.accessToken));
+
+// T7: composition with the PURE builder — the exact payload buildCreateTargetCollabRequest
+// produces is what gets signed and sent, hundredths conversion and field names included.
+const built = buildCreateTargetCollabRequest({
+  name: "Vireo Health Co — ttopen_hydration_hank",
+  message: null,
+  endTimeEpochSeconds: 1701814400,
+  products: [{ productId: "1729382476051234567", targetCommissionRatePercent: 15 }],
+  creatorOpenIds: ["ttopen_hydration_hank"],
+  sellerContactEmail: "partnerships@vireohealth.com",
+  freeSampleRule: { hasFreeSample: false, isSampleApprovalExempt: false },
+});
+ok("T7 pure builder ok", built.ok);
+if (built.ok) {
+  const r6 = buildTargetCollabSignedRequest({ auth, timestamp: ts, path: built.path, body: built.body });
+  eq("T7 composed body bytes", r6.body, JSON.stringify(built.body));
+  ok("T7 commission in hundredths", r6.body !== undefined && r6.body.includes('"target_commission_rate":1500'));
+  ok("T7 creator_user_open_ids key", r6.body !== undefined && r6.body.includes('"creator_user_open_ids":["ttopen_hydration_hank"]'));
+  ok("T7 null message omitted from body", r6.body !== undefined && !r6.body.includes('"message"'));
+  const expectedSign7 = signRequest({
+    path: built.path,
+    queryParams: { app_key: auth.appKey, timestamp: ts, shop_cipher: auth.shopCipher },
+    body: JSON.stringify(built.body),
+    contentType: "application/json",
+    appSecret: auth.appSecret,
+  });
+  ok("T7 sign parity with signRequest", r6.url.endsWith(`&sign=${expectedSign7}`));
+}
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

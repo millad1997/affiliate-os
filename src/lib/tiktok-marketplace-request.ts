@@ -173,3 +173,49 @@ export function buildGetCreatorRequest(args: {
     },
   };
 }
+
+// Signs and addresses a Create Target Collaboration request. Takes the {path, body} produced by
+// buildCreateTargetCollabRequest (tiktok-target-collab.ts) — the pure builder owns the payload
+// shape; this function owns query-level auth params and signing, mirroring
+// buildSearchCreatorsRequest exactly. The body is stringified ONCE here; the signature covers
+// those exact bytes and the same string is sent unmodified (never re-serialize).
+export function buildTargetCollabSignedRequest(args: {
+  auth: MarketplaceAuth;
+  timestamp: number;
+  path: string;
+  body: Record<string, unknown>;
+}): SignedRequest {
+  const { auth, timestamp, path, body } = args;
+  const bodyString = JSON.stringify(body);
+
+  const signParams: Record<string, string | number> = {
+    app_key: auth.appKey,
+    timestamp,
+    shop_cipher: auth.shopCipher,
+  };
+
+  const sign = signRequest({
+    path,
+    queryParams: signParams,
+    body: bodyString,
+    contentType: "application/json",
+    appSecret: auth.appSecret,
+  });
+
+  const urlPairs: Array<[string, string | number]> = [
+    ["app_key", auth.appKey],
+    ["timestamp", timestamp],
+    ["shop_cipher", auth.shopCipher],
+    ["sign", sign],
+  ];
+
+  return {
+    method: "POST",
+    url: `${BASE_URL}${path}?${toQueryString(urlPairs)}`,
+    headers: {
+      "content-type": "application/json",
+      "x-tts-access-token": auth.accessToken,
+    },
+    body: bodyString,
+  };
+}
