@@ -13,8 +13,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Affiliate Commerce OS",
-  description: "AI-assisted TikTok Shop affiliate operations for DTC brands.",
+  metadataBase: new URL("https://droverlabs.app"),
+  title: "Drover",
+  description:
+    "TikTok Shop affiliate creator program management for DTC brands — creator discovery, performance-weighted scoring, compliance-conscious briefs, and a complete audit trail.",
+  openGraph: {
+    title: "Drover",
+    description: "TikTok Shop affiliate creator program management for DTC brands.",
+    url: "https://droverlabs.app",
+    siteName: "Drover",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
